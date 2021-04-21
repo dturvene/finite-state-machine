@@ -1,0 +1,17 @@
+# https://git-scm.com/docs/gitignore
+# https://github.com/github/gitignore
+# 
+
+# Ignore all
+*
+
+# Unignore all with extensions
+!*.c
+!Makefile
+!.gitignore
+
+# ignore temp and manufactured files
+*.o
+
+
+
