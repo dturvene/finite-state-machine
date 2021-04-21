@@ -1,1 +1,1 @@
-This project demonstrates how to create and manage a finite state machine (FSM)
+This project demonstrates how to create, manage and drive a finite state machine (FSM) developed in C and using Linux kernel(ish) APIs.  The code is run in user-space but tracks well with the Linux Kernel and consistent embedded OS APIs. For example, the event queue implementation is a linked list using the `libnl3/netlink/list.h` macros.  This is a user-space replica of the kernel `list.h` macros.
