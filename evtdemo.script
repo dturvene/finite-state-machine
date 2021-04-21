@@ -1,0 +1,8 @@
+# default script to regression test evtdemo.c
+# ./evtdemo
+1 t
+2 2 2 2 2 2 2 2
+t
+5
+T
+# script eof
