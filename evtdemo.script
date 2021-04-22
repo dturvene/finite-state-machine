@@ -1,8 +1,10 @@
 # default script to regression test evtdemo.c
-# ./evtdemo
-1 t
-2 2 2 2 2 2 2 2
+# ./evtdemo -n
+# send a bunch of timer/idle events, sleep, then send more timer/idle
 t
-5
-T
+1
+t i t i
+s
+i t i t
+b
 # script eof
