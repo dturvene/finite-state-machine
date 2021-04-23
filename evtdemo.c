@@ -1,4 +1,8 @@
 /*
+ * SPDX-License-Identifier: GPL-2.0
+ * Copyright (C) 2005-2021 Dahetral Systems
+ * Author: David Turvene (dturvene@dahetral.com)
+ *
  * event producer/consumer
  * 
  * This is a pthread framework for reliable event generation.  It uses
@@ -41,20 +45,11 @@
 #include <stdio.h>       /* char I/O */
 #include <signal.h>      /* sigaction */
 #include <string.h>      /* strlen, strsignal,, memset */
-#include <libnl3/netlink/list.h> /* kernel-ish linked list */
 #include <pthread.h>     /* posix threads */
 #include <sys/epoll.h>   /* epoll_ctl */
-#include <sys/timerfd.h> /* timerfd_create, timerfd_settime, timerfd_gettime */
-#include <sched.h>       /* sched_yield */
-
-/**
- * die - terminate task with a descriptive error message
- * @msg: null-terminated string prepended to system error
- *
- * This is a small helper macro to descriptive but suddenly 
- * exit when an unrecoverable situation occurs.
- */
-#define die(msg) do { perror(msg); exit(EXIT_FAILURE); } while (0)
+#include <utils.h>
+#include <evtq.h>
+#include <timer.h>
 
 /**
  * cleanly exit event loop 
@@ -129,360 +124,7 @@ int cmdline_args(int argc, char *argv[]) {
 	return optind;
 }
 
-
-
-/********************************** debug section *******************************/
-
-/* 
- * _dbg_func - dump debug info to stdout
- * @func: calling function
- * @msg: informational message string
- *
- * This will get current clock and create an information string containing
- * calling function, timestamp and information message, then write string to stdout.
- */
-inline static void _dbg_func(const char *func, const char *msg)
-{
-	struct timespec ts;
-	char buff[64];
-	
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	snprintf(buff, sizeof(buff)-1, "%s:%ld.%09ld %s\n", func, ts.tv_sec, ts.tv_nsec, msg);
-	write(1, buff, strlen(buff));
-}
-#define dbg(msg) _dbg_func(__func__, msg);
-
-/********************** time section **********************/
-
-/**
- * nap - small sleep
- * @ms: number of msecs to nap
- *
- * useful for very small delays, causes thread switch
- */
-inline static void nap(uint32_t ms)
-{
-	struct timespec t;
-
-	t.tv_sec = (ms/1000);
-	t.tv_nsec = (ms%1000)*1e6;
-	nanosleep(&t, NULL);
-}
-
-/**
- * relax - calling thread is rescheduled so waiting threads can run
- * 
- * nap(1) performs a similar function.
- */
-inline static void relax()
-{
-	sched_yield();
-}
-
-/**
- * create_timer - create and return the timerfd file descriptor
- *
- * Return: the file descriptor to be used in other timer routines
- *
- * The timerfd can be used in an epoll_wait loop to generate a periodic
- * timer function. This should be done only during initialization and
- * set_timer to manage it.
- */
-int create_timer()
-{
-	int fd;
-	
-	if (-1 == (fd=timerfd_create(CLOCK_MONOTONIC, 0)))
-		die("timerfd_create");
-
-	return(fd);
-}
-
-/**
- * set_timer - set a timer to a new periodic timeout tick_ms in the future
- *
- * @timerfd: the unique timer fd
- * @tick_ms: a periodic trigger value in milliseconds
-
- * Return: the tick_ms
- *
- * This is called from the timer thread to set, reset, cancel
- * a timer.  If ms == 0, the timer is cancelled.  If a running 
- * timer is called, the future timeout is reset to this value.
- */
-int set_timer(int timerfd, uint64_t tick_ms)
-{
-	struct itimerspec ts;
-	time_t sec;
-	long nsec;
-
-	/* convert ms into timerfd argument 
-	 * special case for 0, which cancels the timer
-	 */
-	sec = tick_ms ? (tick_ms/1000) : 0;
-	nsec = tick_ms ? (tick_ms%1000)*1e6 : 0;
-
-	ts.it_value.tv_sec = sec;
-	ts.it_value.tv_nsec = nsec;
-	ts.it_interval.tv_sec = sec;
-	ts.it_interval.tv_nsec = nsec;
-
-	if (-1 == timerfd_settime(timerfd, 0, &ts, NULL))
-		die("timerfd_settime");
-
-	return tick_ms;
-}
-
-/**
- * stop_timer - stop the timer from generating periodic timeouts
- *
- * @timerfd: the unique timer fd
- *
- * Fully stop the timer, use set_timer to start again.
- */
-void stop_timer(int timerfd)
-{
-	struct itimerspec ts = {0, 0, 0, 0};
-	if (-1 == timerfd_settime(timerfd, 0, &ts, NULL))
-		die("timerfd_settime");
-}
-
-/**
- * get_timer - return the current time left before timeout in ms
- *
- * @timerfd: the unique timer fd
- *
- */
-uint64_t get_timer(int timerfd)
-{
-	struct itimerspec ts;
-	
-	if (-1 == timerfd_gettime(timerfd, &ts))
-		die("timer_gettime");
-
-	return (ts.it_value.tv_sec * 1000L + ts.it_value.tv_nsec / 1e6);
-}
-
 /********************* events and event queues *************************/
-
-/*
- * fsm_events_t - enum containg all events
- */
-typedef enum evt_id {
-	EVT_BAD = 0,
-	EVT_TIMER,
-	EVT_IDLE,
-	/* EVT_DONE will cause consumer to exit when it reads
-	 * the event even if there are events after it in the 
-	 * input queue.
-	 */
-	EVT_DONE,
-	EVT_LAST,
-} fsm_events_t;
-
-/*
- * evt_name - mapping from evt_id to a text string for debugging
- */
-static const char * const evt_name[] = {
-	[EVT_BAD] = "Bad Evt",
-	[EVT_TIMER] = "Time Tick",
-	[EVT_IDLE] = "Idle, so... peaceful",
-	[EVT_DONE] = "DONE, all tasks will exit",
-	[EVT_LAST] = "NULL",
-};
-
-/**
- * struct fsm_event
- * @list: kernel-style linked list node
- * @event_id: one of the valid events
- */
-struct fsm_event {
-	struct nl_list_head list;
-	fsm_events_t event_id;
-};
-
-/**
- * evtq_t - the
- * @len: number of items on queue
- * @head: head of queue
- * @mutex: mutex guarding access to the queue
- * @cond: condition set when an event is added to queue
- *
- * This is user-space implementation of the kernel list management function 
- * https://www.kesrnel.org/doc/html/v5.1/core-api/kernel-api.html#list-management-functions
- * It uses the netlink/list.h macros.
- */
-typedef struct {
-	int len;
-	struct fsm_event head;
-	pthread_mutex_t mutex;
-	pthread_cond_t cond;
-} evtq_t;
-
-/**
- * evtq_create - create a queue instance
- *
- * This will malloc an instance of a queue and
- * initialize it.  Notice the NL_INIT_LIST_HEAD macro.
- */
-evtq_t* evtq_create()
-{
-	evtq_t *pq = malloc(sizeof(evtq_t));
-
-	pthread_mutex_init(&pq->mutex, NULL);
-	pthread_cond_init(&pq->cond, NULL);	
-	pq->len = 0;
-	NL_INIT_LIST_HEAD(&pq->head.list);
-
-	return(pq);
-}
-
-/**
- * evtq_destroy - remove all queue structurs
- *
- * this will destroy mutex, condition and free queue memory
- */
-void evtq_destroy(evtq_t* pq)
-{
-	if (NULL == pq)
-		return;
-
-	pthread_mutex_destroy(&pq->mutex);
-	pthread_cond_destroy(&pq->cond);
-
-	free(pq);
-}
-
-/**
- * evtq_push - add an event to the tail of the queue
- * @evtq_p - pointer to event queue
- * @id - the event id to add
- * 
- * lock queue
- * create event, add to queue tail
- * signal condition that there is an new event queued
- * unlock queue
- */
-void evtq_push(evtq_t *evtq_p, fsm_events_t id)
-{
-	struct fsm_event *ep;
-
-	pthread_mutex_lock(&evtq_p->mutex);
-	
-	ep = malloc( sizeof(struct fsm_event) );
-	ep->event_id = id;
-	nl_list_add_tail(&ep->list, &evtq_p->head.list);
-	evtq_p->len++;
-
-	pthread_cond_signal(&evtq_p->cond);
-	pthread_mutex_unlock(&evtq_p->mutex);
-
-	relax();
-}
-
-/**
- * evt_push_all - 
- */
-void evtq_push_all(evtq_t *evtq_pp[], fsm_events_t id)
-{
-	evtq_push(evtq_pp[0], id);
-	evtq_push(evtq_pp[1], id);
-}
-
-/**
- * evtq_pop - pop an event from head of queue
- * @evtq_p - pointer to event queue
- * @id_p - update this pointer
- *
- * Return: update @id_p with event on queue head
- *
- * lock queue
- * loop while waiting for condition to be set
- *  note: pthread_cond_wait will block waiting on the cond to be set
- * remove event from queue head set the event id
- * free event memory
- * unlock queue
- */ 
-void evtq_pop(evtq_t *evtq_p, fsm_events_t* id_p)
-{
-	struct fsm_event *ep;
-
-	/* lock mutex, must be done before cond_wait */
-	pthread_mutex_lock(&evtq_p->mutex);
-
-	/* make sure there is something to pop off q */
-	while(0 == evtq_p->len) {
-		/* this will unlock mutex and then wait on cond */
-		/* On return mutex is re-acquired */
-		/* if a cond_signal is sent before this is waiting, the signal will be discarded */
-		pthread_cond_wait(&evtq_p->cond, &evtq_p->mutex);
-	}
-
-	ep = nl_list_first_entry(&evtq_p->head.list, struct fsm_event, list);
-	nl_list_del(&ep->list);
-	evtq_p->len--;
-	*id_p = ep->event_id;
-	free(ep);		
-
-	pthread_mutex_unlock(&evtq_p->mutex);
-}
-
-/**
- * evtq_len - 
- * @evtq_p - pointer to event queue
- *
- * Return:
- *   queue len - number of events in queue
- *
- * This is used to check if there are items in queue. 
- * Typically the queue pthread_cond will be set when there are events and evtq_pop
- * will wait on it.  This is used when the thread cannot block on the cond_wait.
- */
-uint32_t evtq_len(evtq_t *evtq_p)
-{
-	int len;
-
-	pthread_mutex_lock(&evtq_p->mutex);
-	len = evtq_p->len;
-	pthread_mutex_unlock(&evtq_p->mutex);
-	return(len);
-}
-
-inline static void event_show(fsm_events_t evt_id, const char *msg)
-{
-	char buff[80];
-	snprintf(buff, sizeof(buff), "%s %s", msg, evt_name[evt_id]);
-	dbg(buff);
-}
-
-/**
- * evtq_show - dump of events in queue
- * @evtq_p - pointer to event queue
- *
- * This is used for diagnostic debugging, queues empty too fast
- * to use this during runtime.
- */
-int evtq_show(evtq_t *evtq_p)
-{
-	struct fsm_event *ep;
-	char msg[80];
-	int len;
-
-	pthread_mutex_lock(&evtq_p->mutex);
-
-	if (nl_list_empty(&evtq_p->head.list)) {
-		dbg("q empty");
-	}
-
-	nl_list_for_each_entry(ep, &evtq_p->head.list, list) {
-		sprintf(msg, "%d: id=%u", len++, ep->event_id);
-		dbg(msg);
-	}
-	sprintf(msg, "qsize: %d", evtq_p->len);
-	dbg(msg);
-
-	pthread_mutex_unlock(&evtq_p->mutex);
-}
 
 /* forward definition */
 int evt_ondemand(const char c, evtq_t **evtq_pp);
@@ -841,7 +483,7 @@ void evt_producer(evtq_t *evtq_pp[])
 }
 
 /**
- * main - a simple driver for an event producer/consumer framework
+ * main - a simple driver for an event producer/consumer framework (MGMT)
  *
  * @argc: argument count, this will be decremented by cmdline_args()
  * @argv: list of arguments, passed to cmdlin_args() and the printed and discarded.
@@ -854,7 +496,6 @@ void evt_producer(evtq_t *evtq_pp[])
  * - wait for consumer thread to terminate
  * - destroy event_queue for the consumer
  */
-
 int main(int argc, char *argv[])
 {
 	int parsed_args;

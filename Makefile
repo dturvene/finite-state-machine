@@ -2,11 +2,9 @@
 
 CC=gcc
 # OPTFLAGS=-O2
-# DEBUGFLAGS=-save-temps -g
 DEBUGFLAGS=-g
 LIBS=-pthread -lrt
-CFLAGS= $(DEBUGFLAGS) $(OPTFLAGS) $(LIBS)
-
+CFLAGS= -I. $(DEBUGFLAGS) $(OPTFLAGS)
 
 BINS := \
 	evtdemo
@@ -16,13 +14,13 @@ RM=rm -f
 all: $(BINS)
 
 # 
-evtdemo: evtdemo.o
-	$(CC) $(CFLAGS) $? -o $@ $(LIBS) 
+evtdemo: evtdemo.o evtq.o timer.o
+	$(CC) $(CFLAGS) $^ -o $@ $(LIBS) 
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $<
 
-run_reg:
+run:
 	@echo Run regression test
 	./evtdemo -n
 
@@ -35,4 +33,4 @@ clean:
 	$(RM) *.o 
 	$(RM) $(BINS)
 
-.PHONY: clean run_reg
+.PHONY: clean run
