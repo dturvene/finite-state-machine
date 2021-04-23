@@ -152,7 +152,6 @@ inline static void _dbg_func(const char *func, const char *msg)
 }
 #define dbg(msg) _dbg_func(__func__, msg);
 
-
 /********************** time section **********************/
 
 /**
@@ -287,7 +286,7 @@ typedef enum evt_id {
 static const char * const evt_name[] = {
 	[EVT_BAD] = "Bad Evt",
 	[EVT_TIMER] = "Time Tick",
-	[EVT_IDLE] = "Idle Ping",
+	[EVT_IDLE] = "Idle, so... peaceful",
 	[EVT_DONE] = "DONE, all tasks will exit",
 	[EVT_LAST] = "NULL",
 };
@@ -381,6 +380,9 @@ void evtq_push(evtq_t *evtq_p, fsm_events_t id)
 	relax();
 }
 
+/**
+ * evt_push_all - 
+ */
 void evtq_push_all(evtq_t *evtq_pp[], fsm_events_t id)
 {
 	evtq_push(evtq_pp[0], id);
@@ -446,6 +448,13 @@ uint32_t evtq_len(evtq_t *evtq_p)
 	return(len);
 }
 
+inline static void event_show(fsm_events_t evt_id, const char *msg)
+{
+	char buff[80];
+	snprintf(buff, sizeof(buff), "%s %s", msg, evt_name[evt_id]);
+	dbg(buff);
+}
+
 /**
  * evtq_show - dump of events in queue
  * @evtq_p - pointer to event queue
@@ -456,7 +465,7 @@ uint32_t evtq_len(evtq_t *evtq_p)
 int evtq_show(evtq_t *evtq_p)
 {
 	struct fsm_event *ep;
-	char msg[32];
+	char msg[80];
 	int len;
 
 	pthread_mutex_lock(&evtq_p->mutex);
@@ -526,7 +535,7 @@ void evt_script(evtq_t **evtq_pp)
  */
 int evt_ondemand(const char c, evtq_t **evtq_pp)
 {
-	char msg[80];
+	
 	switch(c) {
 	case 'h':
 		printf("\tq: quit workers\n");
@@ -561,10 +570,13 @@ int evt_ondemand(const char c, evtq_t **evtq_pp)
 		dbg("after nap");
 		break;
 	default:
+	{
+		char msg[80];
 		sprintf(msg, "unknown command: '%c'", c);
 		dbg(msg);
-		break;
 	}
+	break;
+	} /* switch */
 }
 
 /********************** signal handling section **********************/
@@ -580,7 +592,7 @@ int evt_ondemand(const char c, evtq_t **evtq_pp)
  * for sa_handler (man:sigaction).
  */
 void sig_handler(int sig) {
-	char msg[128];
+	char msg[80];
 	sprintf(msg, "\nCatch %s, set event_loop_done\n", strsignal(sig));
 	write(1, msg, strlen(msg));
 	event_loop_done = true;
@@ -616,6 +628,9 @@ void set_sig_handlers(void) {
 void *evt_timer(void *arg)
 {
 	evtq_t **evtq_pp = (evtq_t**) arg;
+	evtq_t *evtq_me = evtq_pp[1];
+	evtq_t *evtq_consumer = evtq_pp[0];
+	
 	fsm_events_t evt_id;
 	bool done = false;
 
@@ -657,24 +672,24 @@ void *evt_timer(void *arg)
 			break;
 		case 0:
 		{
-
-			if (evtq_len(evtq_pp[1]) > 0) {
-				evtq_pop(evtq_pp[1], &evt_id);
+			if (evtq_len(evtq_me) > 0)
+			{
+				evtq_pop(evtq_me, &evt_id);
+				event_show(evt_id, "pop evt");
+				
 				switch(evt_id) {
 				case EVT_DONE:
 					done = true;
 					break;
 				case EVT_TIMER: /* discard */
 					break;
+				case EVT_IDLE:
+					nap(1000);
+					break;
 				default:
-				{
-					char msg[80];
-					snprintf(msg, sizeof(msg), "pop evt=%s", evt_name[evt_id]);
-					dbg(msg);
-				}
-				break;
-				}
-			}
+					break;
+				} /* switch */
+			} /* if */
 		}
 		break;
 		default:
@@ -713,22 +728,28 @@ void *evt_timer(void *arg)
 void *evt_consumer(void *arg)
 {
 	evtq_t **evtq_pp = (evtq_t**) arg;
+	evtq_t *evtq_me = evtq_pp[0];	
         fsm_events_t evt_id;
 	bool done = false;
-	
-	char msg[80];
 
 	dbg("enter and wait for fsm events");
 		
-	while (!done) {
-		evtq_pop(evtq_pp[0], &evt_id);
-		if (EVT_DONE == evt_id)
+	while (!done)
+	{
+		evtq_pop(evtq_me, &evt_id);
+		event_show(evt_id, "pop evt");
+		
+		switch(evt_id) {
+		case EVT_DONE:
 			done = true;
-		else {
-			snprintf(msg, sizeof(msg), "pop evt=%s", evt_name[evt_id]);
-			dbg(msg);
-		}
-	}
+			break;
+		case EVT_IDLE:
+			nap(100);
+			break;
+		default:
+			break;
+		} /* switch */
+	} /* while */
 	
 	dbg("exitting...");
 }
