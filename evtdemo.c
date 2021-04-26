@@ -38,7 +38,6 @@
 #include <stdlib.h>      /* atoi, malloc, strtol, strtoll, strtoul */
 #include <stdbool.h>     /* bool type and true, false values */
 #include <inttypes.h>    /* include stdint.h, PRI macros, integer conversions */
-#include <ctype.h>       /* isalnum */
 #include <unistd.h>      /* common typdefs, e.g. ssize_t, includes getopt.h */
 #include <errno.h>       /* perror, see /usr/include/asm-generic for E-codes */
 #include <time.h>        /* clock_gettime, struct timespec, timer_create */
@@ -54,7 +53,7 @@
 /**
  * cleanly exit event loop 
  */
-static bool event_loop_done = false;
+bool event_loop_done = false;
 
 /* max number of epoll events to wait for */
 #define MAX_WAIT_EVENTS 1
@@ -72,12 +71,12 @@ char *arguments = "\n"							\
  * scriptfile - file name for event script to inject events
  * into consumer.
  */
-static char scriptfile[64] = "./evtdemo.script";
+char scriptfile[64] = "./evtdemo.script";
 
 /**
  * debug_flag - set the internal debug flag to print more info
  */
-static int debug_flag = 0;
+int debug_flag = 0;
 
 /**
  * non_interactive - If false then commands are accepted
@@ -122,103 +121,6 @@ int cmdline_args(int argc, char *argv[]) {
 		}
 	}
 	return optind;
-}
-
-/********************* events and event queues *************************/
-
-/* forward definition */
-int evt_ondemand(const char c, evtq_t **evtq_pp);
-
-/**
- * evt_script - load events from a file to added to event queue
- * @evtq_p - pointer to event queue
- *
- * The input file is reference by the global scriptfile var.
- * 
- * This is just a shell to read the file for symbolic event ids.  The 
- * events are translate from symbolic to events enum in evt_ondemand()
- */
-void evt_script(evtq_t **evtq_pp)
-{
-	FILE *fin;
-	int len, i;
-	char buf[80];
-	
-	if (NULL == (fin=fopen(scriptfile, "r")))
-		die("unknown fname");
-
-	while (NULL != fgets(buf, sizeof(buf), fin)) {
-
-		/* skip comments and empty lines */
-		if (buf[0] == '#' || buf[0] == '\n')
-			continue;
-		
-		len = strlen(buf);
-		if (debug_flag)
-			printf("buf=%s len=%d\n", buf, len);
-		
-		for (int i=0; i<len; i++)
-			if (isalnum(buf[i]))
-				evt_ondemand(buf[i], evtq_pp);
-	}
-
-	fclose(fin);
-}
-
-/**
- * evt_ondemand - translate symbolic event to internal and push to event q
- *
- * @c: the symbolic event id
- * @evtq_pp - array of event queue pointers
- * 
- * Each event can be symbolically represented as a single char.  This 
- * function maps this to an internal events id (from an enum) and
- * pushes it to the given event queue.
- */
-int evt_ondemand(const char c, evtq_t **evtq_pp)
-{
-	
-	switch(c) {
-	case 'h':
-		printf("\tq: quit workers\n");
-		printf("\tx: exit producer and workers (gracefully)\n");
-		printf("\ti: %s\n", evt_name[EVT_IDLE]);
-		printf("\tt: %s\n", evt_name[EVT_TIMER]);
-		printf("\tr: run event input script from %s\n", scriptfile);
-		printf("\ts: sleep 5000ms\n");
-		printf("\tdefault: %s\n", evt_name[EVT_IDLE]);
-		break;
-	case 'q':
-		/* just exit event threads */
-		evtq_push_all(evtq_pp, EVT_DONE);
-		break;
-	case 'x':
-		/* exit event threads and main */
-		evtq_push_all(evtq_pp, EVT_DONE);		
-		event_loop_done = true;
-		break;
-	case 'i':
-		evtq_push_all(evtq_pp, EVT_IDLE);
-		break;
-	case 't':
-		evtq_push_all(evtq_pp, EVT_TIMER);
-		break;
-	case 'r':
-		evt_script(evtq_pp);
-		break;
-	case 's':
-		dbg("napping for 5000");		
-		nap(5000);
-		dbg("after nap");
-		break;
-	default:
-	{
-		char msg[80];
-		sprintf(msg, "unknown command: '%c'", c);
-		dbg(msg);
-	}
-	break;
-	} /* switch */
 }
 
 /********************** signal handling section **********************/

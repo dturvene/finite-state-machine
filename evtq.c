@@ -9,6 +9,10 @@
 #include <utils.h>
 #include <evtq.h>
 
+extern int debug_flag;
+extern bool event_loop_done;
+extern char scriptfile[];
+
 /**
  * evtq_create - create a queue instance
  *
@@ -165,4 +169,99 @@ int evtq_show(evtq_t *evtq_p)
 	dbg(msg);
 
 	pthread_mutex_unlock(&evtq_p->mutex);
+}
+
+/* forward definition */
+int evt_ondemand(const char c, evtq_t **evtq_pp);
+
+/**
+ * evt_script - load events from a file to added to event queue
+ * @evtq_p - pointer to event queue
+ *
+ * The input file is reference by the global scriptfile var.
+ * 
+ * This is just a shell to read the file for symbolic event ids.  The 
+ * events are translate from symbolic to events enum in evt_ondemand()
+ */
+void evt_script(evtq_t **evtq_pp)
+{
+	FILE *fin;
+	int len, i;
+	char buf[80];
+	
+	if (NULL == (fin=fopen(scriptfile, "r")))
+		die("unknown fname");
+
+	while (NULL != fgets(buf, sizeof(buf), fin)) {
+
+		/* skip comments and empty lines */
+		if (buf[0] == '#' || buf[0] == '\n')
+			continue;
+		
+		len = strlen(buf);
+		if (debug_flag)
+			printf("buf=%s len=%d\n", buf, len);
+		
+		for (int i=0; i<len; i++)
+			if (isalnum(buf[i]))
+				evt_ondemand(buf[i], evtq_pp);
+	}
+
+	fclose(fin);
+}
+
+/**
+ * evt_ondemand - translate symbolic event to internal and push to event q
+ *
+ * @c: the symbolic event id
+ * @evtq_pp - array of event queue pointers
+ * 
+ * Each event can be symbolically represented as a single char.  This 
+ * function maps this to an internal events id (from an enum) and
+ * pushes it to the given event queue.
+ */
+int evt_ondemand(const char c, evtq_t **evtq_pp)
+{
+	
+	switch(c) {
+	case 'h':
+		printf("\tq: quit workers\n");
+		printf("\tx: exit producer and workers (gracefully)\n");
+		printf("\ti: %s\n", evt_name[EVT_IDLE]);
+		printf("\tt: %s\n", evt_name[EVT_TIMER]);
+		printf("\tr: run event input script %s\n", scriptfile);
+		printf("\ts: sleep 5000ms\n");
+		printf("\tdefault: %s\n", evt_name[EVT_IDLE]);
+		break;
+	case 'q':
+		/* just exit event threads */
+		evtq_push_all(evtq_pp, EVT_DONE);
+		break;
+	case 'x':
+		/* exit event threads and main */
+		evtq_push_all(evtq_pp, EVT_DONE);		
+		event_loop_done = true;
+		break;
+	case 'i':
+		evtq_push_all(evtq_pp, EVT_IDLE);
+		break;
+	case 't':
+		evtq_push_all(evtq_pp, EVT_TIMER);
+		break;
+	case 'r':
+		evt_script(evtq_pp);
+		break;
+	case 's':
+		dbg("napping for 5000");		
+		nap(5000);
+		dbg("after nap");
+		break;
+	default:
+	{
+		char msg[80];
+		sprintf(msg, "unknown command: '%c'", c);
+		dbg(msg);
+	}
+	break;
+	} /* switch */
 }

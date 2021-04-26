@@ -3,7 +3,7 @@
  * Copyright (C) 2005-2021 Dahetral Systems
  * Author: David Turvene (dturvene@dahetral.com)
  *
- * emacs include file template
+ * timerfd wrappers
  */
 
 #ifndef _TIMER_H

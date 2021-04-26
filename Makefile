@@ -15,6 +15,9 @@ all: $(BINS)
 
 # 
 evtdemo: evtdemo.o evtq.o timer.o
+	$(CC) $(CFLAGS) $^ -o $@ $(LIBS)
+
+fsmdemo: fsmdemo.o evtq.o timer.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LIBS) 
 
 %.o: %.c

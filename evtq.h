@@ -13,6 +13,7 @@
 #include <inttypes.h>    /* include stdint.h, PRI macros, integer conversions */
 #include <unistd.h>      /* write */
 #include <stdlib.h>
+#include <ctype.h>       /* isalnum */
 #include <stdio.h>
 #include <string.h>
 #include <pthread.h>     /* posix threads */
@@ -85,6 +86,8 @@ extern void evtq_push(evtq_t *evtq_p, fsm_events_t id);
 extern void evtq_push_all(evtq_t *evtq_pp[], fsm_events_t id);
 extern void evtq_pop(evtq_t *evtq_p, fsm_events_t* id_p);
 extern uint32_t evtq_len(evtq_t *evtq_p);
+extern int evt_ondemand(const char c, evtq_t **evtq_pp);
+extern void evt_script(evtq_t **evtq_pp);
 
 #endif /* _EVTQ_H */
 

@@ -3,7 +3,12 @@
  * Copyright (C) 2005-2021 Dahetral Systems
  * Author: David Turvene (dturvene@dahetral.com)
  *
- * emacs include file template
+ * A collection of support utils
+ * 
+ * die: test program will fail so exit with an error
+ * nap: sleep for N milliseconds
+ * relax: stop running the thread and put it at tail of run queue
+ * dbg: function, timestamp, msg write to stdout
  */
 
 #ifndef _UTILS_H
@@ -57,6 +62,8 @@ inline static void relax()
  *
  * This will get current clock and create an information string containing
  * calling function, timestamp and information message, then write string to stdout.
+ * Use write instead of printf so can be called from interrupt handlers.  printf has
+ * an internal mutex that can cause deadlock. 
  */
 inline static void _dbg_func(const char *func, const char *msg)
 {
