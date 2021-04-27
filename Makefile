@@ -17,8 +17,17 @@ all: $(BINS)
 evtdemo: evtdemo.o evtq.o timer.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LIBS)
 
+evtdemo.o: evtdemo.c workers.h utils.h
+	$(CC) $(CFLAGS) -c $<
+
+evtq.o: evtq.c evtq.h utils.h
+	$(CC) $(CFLAGS) -c $<
+
+timer.o: timer.c timer.h utils.h
+	$(CC) $(CFLAGS) -c $<
+
 fsmdemo: fsmdemo.o evtq.o timer.o
-	$(CC) $(CFLAGS) $^ -o $@ $(LIBS) 
+	$(CC) $(CFLAGS) $^ -o $@ $(LIBS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $<

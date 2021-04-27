@@ -20,6 +20,7 @@
 #include <sched.h>       /* sched_yield */
 #include <time.h>        /* nanosleep, clock_gettime */
 #include <string.h>      /* strlen */
+#include <pthread.h>     /* pthread_self */
 
 /**
  * die - terminate task with a descriptive error message
@@ -68,11 +69,18 @@ inline static void relax()
 inline static void _dbg_func(const char *func, const char *msg)
 {
 	struct timespec ts;
-	char buff[64];
+	char buf[80];
+	int len;
 	
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	snprintf(buff, sizeof(buff)-1, "%s:%ld.%09ld %s\n", func, ts.tv_sec, ts.tv_nsec, msg);
-	write(1, buff, strlen(buff));
+	len=snprintf(buf, sizeof(buf), "%lu:%s ts=%ld.%09ld %s\n", pthread_self(), func, ts.tv_sec, ts.tv_nsec, msg);
+	/* if cannot fit entire string into buffer, force a newline and null at end */
+	if (len >= sizeof(buf)) {
+		buf[78] = '\n';
+		buf[79] = '\0';
+	}
+	/* write string to STDOUT */
+	write(1, buf, strlen(buf));
 }
 #define dbg(msg) _dbg_func(__func__, msg);
 

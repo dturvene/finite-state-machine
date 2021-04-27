@@ -49,6 +49,7 @@
 #include <utils.h>
 #include <evtq.h>
 #include <timer.h>
+#include <workers.h>
 
 /**
  * cleanly exit event loop 
@@ -171,9 +172,11 @@ void set_sig_handlers(void) {
  */
 void *evt_timer(void *arg)
 {
-	evtq_t **evtq_pp = (evtq_t**) arg;
-	evtq_t *evtq_me = evtq_pp[1];
-	evtq_t *evtq_consumer = evtq_pp[0];
+	workers_t* workers_p = (workers_t *) arg;
+	worker_t *me = worker_find(pthread_self());
+	worker_t *consumer = worker_first();
+	evtq_t *evtq_me = me->evtq_p;
+	evtq_t *evtq_consumer = consumer->evtq_p;
 	
 	fsm_events_t evt_id;
 	bool done = false;
@@ -219,7 +222,6 @@ void *evt_timer(void *arg)
 			if (evtq_len(evtq_me) > 0)
 			{
 				evtq_pop(evtq_me, &evt_id);
-				event_show(evt_id, "pop evt");
 				
 				switch(evt_id) {
 				case EVT_DONE:
@@ -248,8 +250,7 @@ void *evt_timer(void *arg)
 					char msg[64];
 					
 					read(fd_timer, &res, sizeof(res));
-					dbg("push EVT_TIMER");
-					evtq_push(evtq_pp[0], EVT_TIMER);
+					workers_evt_push(EVT_TIMER);
 				}
 			}
 		}
@@ -271,8 +272,8 @@ void *evt_timer(void *arg)
  */
 void *evt_consumer(void *arg)
 {
-	evtq_t **evtq_pp = (evtq_t**) arg;
-	evtq_t *evtq_me = evtq_pp[0];	
+	workers_t* workers_p = (workers_t *) arg;
+	evtq_t *evtq_me = worker_find(pthread_self())->evtq_p;
         fsm_events_t evt_id;
 	bool done = false;
 
@@ -281,9 +282,10 @@ void *evt_consumer(void *arg)
 	while (!done)
 	{
 		evtq_pop(evtq_me, &evt_id);
-		event_show(evt_id, "pop evt");
 		
 		switch(evt_id) {
+		case EVT_TIMER:
+			break;
 		case EVT_DONE:
 			done = true;
 			break;
@@ -313,7 +315,7 @@ void *evt_consumer(void *arg)
  * either from a signal handler or evt_ondemand() input.
  * 
  */
-void evt_producer(evtq_t *evtq_pp[])
+void evt_producer(void)
 {
 	int fd_epoll;                 /* epoll reference */
 	struct epoll_event event;     /* struct to add to the epoll list */
@@ -375,7 +377,8 @@ void evt_producer(evtq_t *evtq_pp[])
 					if (debug_flag)
 						printf("\nread %d: %s\n", len, buf);
 
-					evt_ondemand(buf[0], evtq_pp);
+					// evt_ondemand(buf[0], evtq_pp);
+					evt_ondemand(buf[0]);
 				}
 			}
 		}
@@ -402,8 +405,8 @@ int main(int argc, char *argv[])
 {
 	int parsed_args;
 
-	pthread_t task[2];
-	evtq_t *evtq_pp[2];
+	// pthread_t task[2];
+	// evtq_t *evtq_pp[2];
 
 	parsed_args = cmdline_args(argc, argv);
 
@@ -415,31 +418,23 @@ int main(int argc, char *argv[])
 	}
 	set_sig_handlers();
 
-	/* create queue and consumer task */
-	evtq_pp[0] = evtq_create();
-	if (0 != pthread_create(&task[0], NULL, &evt_consumer, (void *)evtq_pp))
-		die("consumer task");
+	worker_list_create();
+	worker_list_add(worker_create(&evt_consumer, "consumer"));
+	worker_list_add(worker_create(&evt_timer, "timer"));
+	// show_workers();	
 
-	/* create queue and timer task */
-	evtq_pp[1] = evtq_create();
-	if (0 != pthread_create(&task[1], NULL, &evt_timer, (void *)evtq_pp))
-		die("timer task");
-	
-	non_interactive ? evt_script(evtq_pp) : evt_producer(evtq_pp);
+	non_interactive ? evt_script() : evt_producer();
 
-	/* evt_producer may not have sent the critical EVT_DONE event to consumer
-	 * do so now.  If the consumer has exitted this will go into the void.
+	/* if interrupted MGMT may not have sent the critical EVT_DONE 
+	 * to workers so do now.
 	 */
-	evtq_push(evtq_pp[0], EVT_DONE);
-	evtq_push(evtq_pp[1], EVT_DONE);
+	workers_evt_push(EVT_DONE);
 	
 	dbg("waiting for joins");
-	pthread_join(task[0], NULL);
-	pthread_join(task[1], NULL);	
+	join_workers();
 
 	dbg("cleanup");
-	evtq_destroy(evtq_pp[0]);
-	evtq_destroy(evtq_pp[1]);	
+	// evtq_destroy_all(evtq_pp);
 
 	dbg("exitting...");
 }

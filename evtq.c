@@ -21,14 +21,14 @@ extern char scriptfile[];
  */
 evtq_t* evtq_create(void)
 {
-	evtq_t *pq = malloc(sizeof(evtq_t));
+	evtq_t *q_p = malloc(sizeof(evtq_t));
 
-	pthread_mutex_init(&pq->mutex, NULL);
-	pthread_cond_init(&pq->cond, NULL);	
-	pq->len = 0;
-	NL_INIT_LIST_HEAD(&pq->head.list);
+	pthread_mutex_init(&q_p->mutex, NULL);
+	pthread_cond_init(&q_p->cond, NULL);	
+	q_p->len = 0;
+	NL_INIT_LIST_HEAD(&q_p->head.list);
 
-	return(pq);
+	return(q_p);
 }
 
 /**
@@ -36,15 +36,21 @@ evtq_t* evtq_create(void)
  *
  * this will destroy mutex, condition and free queue memory
  */
-void evtq_destroy(evtq_t* pq)
+void evtq_destroy(evtq_t* q_p)
 {
-	if (NULL == pq)
+	if (NULL == q_p)
 		return;
 
-	pthread_mutex_destroy(&pq->mutex);
-	pthread_cond_destroy(&pq->cond);
+	pthread_mutex_destroy(&q_p->mutex);
+	pthread_cond_destroy(&q_p->cond);
 
-	free(pq);
+	free(q_p);
+}
+
+void evtq_destroy_all(evtq_t **q_pp)
+{
+	evtq_destroy(q_pp[0]);
+	evtq_destroy(q_pp[1]);
 }
 
 /**
@@ -60,6 +66,7 @@ void evtq_destroy(evtq_t* pq)
 void evtq_push(evtq_t *evtq_p, fsm_events_t id)
 {
 	struct fsm_event *ep;
+	char msg[80];
 
 	pthread_mutex_lock(&evtq_p->mutex);
 	
@@ -71,16 +78,13 @@ void evtq_push(evtq_t *evtq_p, fsm_events_t id)
 	pthread_cond_signal(&evtq_p->cond);
 	pthread_mutex_unlock(&evtq_p->mutex);
 
-	relax();
-}
+	if (debug_flag) {
+		char msg[80];
+		snprintf(msg, sizeof(msg), "pop %s", evt_name[id]);
+		dbg(msg);
+	}
 
-/**
- * evt_push_all - 
- */
-void evtq_push_all(evtq_t *evtq_pp[], fsm_events_t id)
-{
-	evtq_push(evtq_pp[0], id);
-	evtq_push(evtq_pp[1], id);
+	relax();
 }
 
 /**
@@ -119,6 +123,12 @@ void evtq_pop(evtq_t *evtq_p, fsm_events_t* id_p)
 	free(ep);		
 
 	pthread_mutex_unlock(&evtq_p->mutex);
+
+	if (debug_flag) {
+		char msg[80];
+		snprintf(msg, sizeof(msg), "pop %s", evt_name[*id_p]);
+		dbg(msg);
+	}
 }
 
 /**
@@ -172,18 +182,26 @@ int evtq_show(evtq_t *evtq_p)
 }
 
 /* forward definition */
+#if 0
 int evt_ondemand(const char c, evtq_t **evtq_pp);
+#else
+int evt_ondemand(const char c);
+#endif
 
 /**
  * evt_script - load events from a file to added to event queue
- * @evtq_p - pointer to event queue
+ * @evtq_pp - pointer to event queue array
  *
  * The input file is reference by the global scriptfile var.
  * 
  * This is just a shell to read the file for symbolic event ids.  The 
  * events are translate from symbolic to events enum in evt_ondemand()
  */
+#if 0
 void evt_script(evtq_t **evtq_pp)
+#else
+void evt_script(void)
+#endif
 {
 	FILE *fin;
 	int len, i;
@@ -204,7 +222,8 @@ void evt_script(evtq_t **evtq_pp)
 		
 		for (int i=0; i<len; i++)
 			if (isalnum(buf[i]))
-				evt_ondemand(buf[i], evtq_pp);
+				// evt_ondemand(buf[i], evtq_pp);
+				evt_ondemand(buf[i]);
 	}
 
 	fclose(fin);
@@ -220,12 +239,15 @@ void evt_script(evtq_t **evtq_pp)
  * function maps this to an internal events id (from an enum) and
  * pushes it to the given event queue.
  */
+#if 0
 int evt_ondemand(const char c, evtq_t **evtq_pp)
+#else
+#include <workers.h>
+int evt_ondemand(const char c)
+#endif
 {
-	
 	switch(c) {
 	case 'h':
-		printf("\tq: quit workers\n");
 		printf("\tx: exit producer and workers (gracefully)\n");
 		printf("\ti: %s\n", evt_name[EVT_IDLE]);
 		printf("\tt: %s\n", evt_name[EVT_TIMER]);
@@ -233,23 +255,19 @@ int evt_ondemand(const char c, evtq_t **evtq_pp)
 		printf("\ts: sleep 5000ms\n");
 		printf("\tdefault: %s\n", evt_name[EVT_IDLE]);
 		break;
-	case 'q':
-		/* just exit event threads */
-		evtq_push_all(evtq_pp, EVT_DONE);
-		break;
 	case 'x':
 		/* exit event threads and main */
-		evtq_push_all(evtq_pp, EVT_DONE);		
+		workers_evt_push(EVT_DONE);
 		event_loop_done = true;
 		break;
 	case 'i':
-		evtq_push_all(evtq_pp, EVT_IDLE);
+		workers_evt_push(EVT_IDLE);		
 		break;
 	case 't':
-		evtq_push_all(evtq_pp, EVT_TIMER);
+		workers_evt_push(EVT_TIMER);		
 		break;
 	case 'r':
-		evt_script(evtq_pp);
+		// evt_script(evtq_pp);
 		break;
 	case 's':
 		dbg("napping for 5000");		

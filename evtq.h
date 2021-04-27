@@ -40,8 +40,8 @@ typedef enum evt_id {
 static const char * const evt_name[] = {
 	[EVT_BAD] = "Bad Evt",
 	[EVT_TIMER] = "Time Tick",
-	[EVT_IDLE] = "Idle, so... peaceful",
-	[EVT_DONE] = "DONE, all tasks will exit",
+	[EVT_IDLE] = "Idle",
+	[EVT_DONE] = "DONE",
 	[EVT_LAST] = "NULL",
 };
 
@@ -73,21 +73,23 @@ typedef struct {
 	pthread_cond_t cond;
 } evtq_t;
 
-static inline void event_show(fsm_events_t evt_id, const char *msg)
+static inline void evt_show(fsm_events_t evt_id, const char *msg)
 {
 	char buff[80];
 	snprintf(buff, sizeof(buff), "%s %s", msg, evt_name[evt_id]);
-	// dbg(buff);
+	dbg(buff);
 }
 
 extern evtq_t* evtq_create(void);
-extern void evtq_destroy(evtq_t* pq);
+extern void evtq_destroy(evtq_t* q_p);
+extern void evtq_destroy_all(evtq_t** q_pp);
 extern void evtq_push(evtq_t *evtq_p, fsm_events_t id);
-extern void evtq_push_all(evtq_t *evtq_pp[], fsm_events_t id);
+extern int evtq_show(evtq_t *evtq_p);
+// extern void evtq_push_all(evtq_t *evtq_pp[], fsm_events_t id);
 extern void evtq_pop(evtq_t *evtq_p, fsm_events_t* id_p);
 extern uint32_t evtq_len(evtq_t *evtq_p);
-extern int evt_ondemand(const char c, evtq_t **evtq_pp);
-extern void evt_script(evtq_t **evtq_pp);
+extern int evt_ondemand(const char c);
+extern void evt_script(void);
 
 #endif /* _EVTQ_H */
 
