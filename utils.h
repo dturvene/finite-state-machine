@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-2.0
- * Copyright (C) 2005-2021 Dahetral Systems
+ * Copyright (C) 2021 Dahetral Systems
  * Author: David Turvene (dturvene@dahetral.com)
  *
  * A collection of support utils
@@ -82,7 +82,9 @@ inline static void _dbg_func(const char *func, const char *msg)
 	/* write string to STDOUT */
 	write(1, buf, strlen(buf));
 }
-#define dbg(msg) _dbg_func(__func__, msg);
+
+extern int debug_flag;
+#define dbg(msg) if (debug_flag) _dbg_func(__func__, msg);
 
 #endif /* _UTILS_H */
 

@@ -7,7 +7,8 @@ LIBS=-pthread -lrt
 CFLAGS= -I. $(DEBUGFLAGS) $(OPTFLAGS)
 
 BINS := \
-	evtdemo
+	evtdemo \
+	fsmdemo
 
 RM=rm -f
 

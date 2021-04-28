@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-2.0
- * Copyright (C) 2005-2021 Dahetral Systems
+ * Copyright (C) 2021 Dahetral Systems
  * Author: David Turvene (dturvene@dahetral.com)
  *
  * event queue
@@ -190,18 +190,13 @@ int evt_ondemand(const char c);
 
 /**
  * evt_script - load events from a file to added to event queue
- * @evtq_pp - pointer to event queue array
  *
  * The input file is reference by the global scriptfile var.
  * 
  * This is just a shell to read the file for symbolic event ids.  The 
  * events are translate from symbolic to events enum in evt_ondemand()
  */
-#if 0
-void evt_script(evtq_t **evtq_pp)
-#else
 void evt_script(void)
-#endif
 {
 	FILE *fin;
 	int len, i;
@@ -218,7 +213,7 @@ void evt_script(void)
 		
 		len = strlen(buf);
 		if (debug_flag)
-			printf("buf=%s len=%d\n", buf, len);
+			printf("len=%d buf=%s", len, buf);
 		
 		for (int i=0; i<len; i++)
 			if (isalnum(buf[i]))
@@ -267,7 +262,7 @@ int evt_ondemand(const char c)
 		workers_evt_push(EVT_TIMER);		
 		break;
 	case 'r':
-		// evt_script(evtq_pp);
+		evt_script();
 		break;
 	case 's':
 		dbg("napping for 5000");		

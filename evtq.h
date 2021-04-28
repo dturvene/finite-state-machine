@@ -1,9 +1,9 @@
 /*
  * SPDX-License-Identifier: GPL-2.0
- * Copyright (C) 2005-2021 Dahetral Systems
+ * Copyright (C) 2021 Dahetral Systems
  * Author: David Turvene (dturvene@dahetral.com)
  *
- * emacs include file template
+ * events and event queue definitions
  */
 
 #ifndef _EVTQ_H
@@ -26,10 +26,10 @@ typedef enum evt_id {
 	EVT_BAD = 0,
 	EVT_TIMER,
 	EVT_IDLE,
-	/* EVT_DONE will cause consumer to exit when it reads
-	 * the event even if there are events after it in the 
-	 * input queue.
-	 */
+	EVT_INIT,
+	EVT_RED,
+	EVT_GREEN,
+	EVT_YELLOW,
 	EVT_DONE,
 	EVT_LAST,
 } fsm_events_t;
@@ -41,6 +41,10 @@ static const char * const evt_name[] = {
 	[EVT_BAD] = "Bad Evt",
 	[EVT_TIMER] = "Time Tick",
 	[EVT_IDLE] = "Idle",
+	[EVT_INIT] = "INIT",
+	[EVT_RED] = "RED",
+	[EVT_GREEN] = "GREEN",
+	[EVT_YELLOW] = "YELLOW",
 	[EVT_DONE] = "DONE",
 	[EVT_LAST] = "NULL",
 };

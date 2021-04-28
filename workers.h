@@ -1,6 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-2.0
- * Copyright (C) 2005-2021 Dahetral Systems
+ * Copyright (C) 2021 Dahetral Systems
  * Author: David Turvene (dturvene@dahetral.com)
  *
  * worker thread management
@@ -19,11 +19,13 @@
 #include <pthread.h>     /* posix threads */
 #include <libnl3/netlink/list.h> /* kernel-ish linked list */
 #include <evtq.h>
+#include <fsm.h>
 
 typedef struct worker {
 	struct nl_list_head list;
 	char name[32];
 	pthread_t worker_id;
+	fsm_trans_t *fsm;
 	evtq_t *evtq_p;
 } worker_t;
 
@@ -42,9 +44,15 @@ inline static worker_t * worker_create(void *(*startfn_p)(void*), char* name)
 	w_p->evtq_p = evtq_create();
 	if (0 != pthread_create(&w_p->worker_id, NULL, startfn_p, (void *)&workers))
 		die("worker_create");
-
-	printf("created %s\n",w_p->name);
 	return (w_p);
+}
+
+inline static worker_t *fsm_create(void *(*startfn_p)(void*), char* name, fsm_trans_t* fsm)
+{
+	worker_t *w_p;
+
+	w_p = worker_create(startfn_p, name);
+	w_p->fsm = fsm;
 }
 
 inline static void worker_list_create()
@@ -60,19 +68,33 @@ inline static void worker_list_add(worker_t *w_p)
 inline static worker_t *worker_first()
 {
 	worker_t *w_p;
-	
 	w_p = nl_list_first_entry(&workers.head.list, worker_t, list);
 	return (w_p);
 }
 
-inline static worker_t *worker_find(pthread_t id)
+inline static worker_t *worker_find_id(pthread_t id)
 {
 	worker_t *w_p;
-
 	nl_list_for_each_entry(w_p, &workers.head.list, list) {
 		if (w_p->worker_id == id)
 			return(w_p);
 	}
+	return(NULL);
+}
+
+inline static worker_t *worker_self(void)
+{
+	return worker_find_id(pthread_self());
+}
+
+inline static worker_t *worker_find_name(const char *name)
+{
+	worker_t *w_p;	
+	nl_list_for_each_entry(w_p, &workers.head.list, list) {
+		if (0 == strncmp(w_p->name, name, sizeof(w_p->name)))
+			return(w_p);
+	}
+	return(NULL);
 }
 
 inline static void workers_evt_push(fsm_events_t evt_id)

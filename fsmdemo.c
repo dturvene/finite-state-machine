@@ -3,36 +3,7 @@
  * Copyright (C) 2021 Dahetral Systems
  * Author: David Turvene (dturvene@dahetral.com)
  *
- * event producer/consumer
- * 
- * This is a pthread framework for reliable event generation.  It uses
- * a pthread mutex and cond to guard access to the event queue pushed
- * and popped by the threads.  A timer event is implemented in the 
- * producer via epoll_wait timeout.
- * 
- * Three threads: 
- * - main thread (producer)
- * - consumer thread 
- * - timer thread
- *
- * The main thread creates the consumer and timer threads and an event 
- * queue to each.
-
- * Next the main thread sits on a blocking epoll_wait to read symbolic
- * fsm_events from STDIN. It translates to internal events and sends to all 
- * fsm_event queues.  Symbolic events can also be read from a script 
- * file.  See evt_producer and evt_ondemand for the logic.
- * When the producer sends an EVT_DONE, all threads will exit their respective  
- * event loops.
- *
- * The consumer thread event loop blocks on pthead_cond_wait until signalled that 
- * an fsm_event is present its event queue and prints the event.  It does 
- * not send any events.
- *
- * The timer thread sits on a timerfd and periodically sends a timer 
- * fsm_event to the consumer thread.  It has a poll_wait timeout to checks 
- * its fsm_event queue for incoming events.
- *
+ * FSM
  */
 
 #include <stdlib.h>      /* atoi, malloc, strtol, strtoll, strtoul */
@@ -49,12 +20,17 @@
 #include <utils.h>
 #include <evtq.h>
 #include <timer.h>
+#include <fsm.h>
 #include <workers.h>
 
 /**
  * cleanly exit event loop 
  */
 bool event_loop_done = false;
+
+/* TODO move from global */
+int fd_timer;                 /* timerfd reference */
+
 
 /* max number of epoll events to wait for */
 #define MAX_WAIT_EVENTS 1
@@ -161,7 +137,7 @@ void set_sig_handlers(void) {
 /********************************** application logic *******************************/
 
 /**
- * evt_timer - pthread generating timer events to consumer
+ * timer_task - pthread generating timer events to consumer
  * @arg: event queue array created by controlling thread
  *
  * - create a periodic timer and set it to 1sec interval
@@ -170,23 +146,24 @@ void set_sig_handlers(void) {
  * - if periodic timer expires, send EVT_TIMER to consumer
  * - this task receives all events but discards EVT_TIMER
  */
-void *evt_timer(void *arg)
+void *timer_task(void *arg)
 {
 	workers_t* workers_p = (workers_t *) arg;
-	worker_t *self = worker_self();
-	worker_t *consumer = worker_find_name("consumer");
-	evtq_t *evtq_self = self->evtq_p;
-	evtq_t *evtq_consumer = consumer->evtq_p;
+	fsm_trans_t *fsm_p = worker_self()->fsm;
+	fsm_state_t *currst_p;
+	fsm_state_t *nextst_p;
+	evtq_t *evtq_self = worker_self()->evtq_p;
 	
 	fsm_events_t evt_id;
 	bool done = false;
 
 	int fd_epoll;                 /* epoll reference */
-	int fd_timer;                 /* timerfd reference */
 	
 	uint64_t res;
 	struct epoll_event event;     /* struct to add to the epoll list */
 	struct epoll_event events[1]; /* struct return from epoll_wait */
+
+	printf("%lu: %s\n", pthread_self(), __func__);
 
 	/* create epoll */
 	if (-1 == (fd_epoll=epoll_create1(0)))
@@ -198,14 +175,14 @@ void *evt_timer(void *arg)
 	if (-1 == epoll_ctl(fd_epoll, EPOLL_CTL_ADD, event.data.fd, &event))
 		die("epoll_ctl for timerfd");
 
-	set_timer(fd_timer, 1000);
+	/* init timer FSM */
+	currst_p = fsm_p->curr;
+	if (currst_p->entry_action)
+		currst_p->entry_action(currst_p);
 
-	while (!done) {
+	while (EVT_DONE != evt_id) {
 		int nfds; /* number of ready file descriptors */
 
-		if (debug_flag)
-			dbg("poll_wait");
-		
 		/* set timeout to 200ms to check event queue */
 		nfds=epoll_wait(fd_epoll, events, MAX_WAIT_EVENTS, 200);
 
@@ -222,19 +199,15 @@ void *evt_timer(void *arg)
 			if (evtq_len(evtq_self) > 0)
 			{
 				evtq_pop(evtq_self, &evt_id);
-				
-				switch(evt_id) {
-				case EVT_DONE:
-					done = true;
-					break;
-				case EVT_TIMER: /* discard */
-					break;
-				case EVT_IDLE:
-					nap(1000);
-					break;
-				default:
-					break;
-				} /* switch */
+				nextst_p = next_state(currst_p, evt_id, fsm_p);
+				if (nextst_p) {
+					if (currst_p->exit_action) {
+						currst_p->exit_action(currst_p);
+					}
+					currst_p = nextst_p;
+					if (currst_p->entry_action)
+						currst_p->entry_action(currst_p);
+				}
 			} /* if */
 		}
 		break;
@@ -259,42 +232,87 @@ void *evt_timer(void *arg)
 	} /* while */
 	
 	dbg("exitting...");	
-}		
-		
+}
+
+/************************* FSM data and tasks **********************/
+
+void act_enter(void *arg)
+{
+	fsm_state_t *state_p = (fsm_state_t*) arg;
+	printf("%ld %s: %s\n", pthread_self(), __func__, state_p->name);
+}
+
+void act_exit(void *arg)
+{
+	fsm_state_t *state_p = (fsm_state_t*) arg;
+	printf("%ld %s: %s\n", pthread_self(), __func__, state_p->name);
+}
+
+void act_t3(void *arg)
+{
+	fsm_state_t *state_p = (fsm_state_t*) arg;
+	printf("%s: %s\n", __func__, state_p->name);
+
+	set_timer(fd_timer, 3000);
+}
+
+fsm_state_t st_init = {"INIT", act_enter, act_exit};
+fsm_state_t st_done = {"DONE", act_enter, act_exit};
+fsm_state_t st_red = {"RED", act_enter, act_exit};
+fsm_state_t st_green = {"GREEN", act_enter, act_exit};
+fsm_state_t st_yellow = {"YELLOW", act_enter, act_exit};
+
+fsm_state_t st_timer_init = {"T3 INIT", act_t3, act_exit};
+fsm_state_t st_run1 = {"RUN1", act_enter, act_exit};
+
+fsm_trans_t FSM1[] = {
+	{&st_init, EVT_INIT, &st_red},
+	{&st_red, EVT_TIMER, &st_green},
+	{&st_red, EVT_DONE, &st_done},
+	{&st_green, EVT_TIMER, &st_yellow},
+	{&st_green, EVT_DONE, &st_done},	
+	{&st_yellow, EVT_TIMER, &st_red},
+	{&st_yellow, EVT_DONE, &st_done},	
+};
+
+fsm_trans_t FSM3[] = {
+	{&st_timer_init, EVT_INIT, &st_run1},
+	{&st_run1, EVT_TIMER, &st_run1},
+	{&st_run1, EVT_DONE, &st_run1},	
+};
+	
 /**
- * evt_consumer - archetype event consumer thread
- * @arg: event queue array created by controlling thread
- *
- * This is a simple framework:
- * - pop an event when it is available (evtq_pop blocks until then)
- * - print the event
- * - if it is an EVT_DONE event end loop and exit
+ * fsm
  */
-void *evt_consumer(void *arg)
+void *fsm_task(void *arg)
 {
 	workers_t* workers_p = (workers_t *) arg;
+	fsm_trans_t *fsm_p = worker_self()->fsm;
+	fsm_state_t *currst_p;
+	fsm_state_t *nextst_p;
+	
 	evtq_t *evtq_self = worker_self()->evtq_p;
         fsm_events_t evt_id;
-	bool done = false;
 
-	dbg("enter and wait for fsm events");
-		
-	while (!done)
+	printf("%lu: %s\n", pthread_self(), __func__);		
+
+	currst_p = fsm_p->curr;
+	if (currst_p->entry_action)
+		currst_p->entry_action(currst_p);
+
+	while (evt_id != EVT_DONE)
 	{
+		/* blocks until event is in queue */
 		evtq_pop(evtq_self, &evt_id);
-		
-		switch(evt_id) {
-		case EVT_TIMER:
-			break;
-		case EVT_DONE:
-			done = true;
-			break;
-		case EVT_IDLE:
-			nap(100);
-			break;
-		default:
-			break;
-		} /* switch */
+		nextst_p = next_state(currst_p, evt_id, fsm_p);
+		if (nextst_p) {
+			if (currst_p->exit_action) {
+				currst_p->exit_action(currst_p);
+			}
+			currst_p = nextst_p;
+			if (currst_p->entry_action)
+				currst_p->entry_action(currst_p);
+		}
 	} /* while */
 	
 	dbg("exitting...");
@@ -419,9 +437,16 @@ int main(int argc, char *argv[])
 	set_sig_handlers();
 
 	worker_list_create();
-	worker_list_add(worker_create(&evt_consumer, "consumer"));
-	worker_list_add(worker_create(&evt_timer, "timer"));
-	// show_workers();	
+	worker_list_add(fsm_create(&fsm_task, "stoplight", FSM1));
+#if 0
+	worker_list_add(worker_create(&timer_task, "timer"));
+#else
+	worker_list_add(fsm_create(&timer_task, "timer", FSM3));
+#endif
+	// show_workers();
+
+	/* start your FSM! */
+	workers_evt_push(EVT_INIT);
 
 	non_interactive ? evt_script() : evt_producer();
 

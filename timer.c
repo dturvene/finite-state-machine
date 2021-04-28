@@ -1,9 +1,9 @@
 /*
  * SPDX-License-Identifier: GPL-2.0
- * Copyright (C) 2005-2021 Dahetral Systems
+ * Copyright (C) 2021 Dahetral Systems
  * Author: David Turvene (dturvene@dahetral.com)
  *
- * event queue
+ * periodic timer API using timerfd functions 
  */
 
 #include <utils.h>
