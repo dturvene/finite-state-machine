@@ -25,7 +25,7 @@ typedef struct worker {
 	struct nl_list_head list;
 	char name[32];
 	pthread_t worker_id;
-	fsm_trans_t *fsm;
+	fsm_trans_t *fsm_p;
 	evtq_t *evtq_p;
 } worker_t;
 
@@ -47,12 +47,12 @@ inline static worker_t * worker_create(void *(*startfn_p)(void*), char* name)
 	return (w_p);
 }
 
-inline static worker_t *fsm_create(void *(*startfn_p)(void*), char* name, fsm_trans_t* fsm)
+inline static worker_t *fsm_create(void *(*startfn_p)(void*), char* name, fsm_trans_t* fsm_p)
 {
 	worker_t *w_p;
 
 	w_p = worker_create(startfn_p, name);
-	w_p->fsm = fsm;
+	w_p->fsm_p = fsm_p;
 }
 
 inline static void worker_list_create()
@@ -87,7 +87,14 @@ inline static worker_t *worker_self(void)
 	return worker_find_id(pthread_self());
 }
 
-inline static worker_t *worker_find_name(const char *name)
+inline static const char* worker_get_name(void)
+{
+	worker_t *w_p = worker_self();
+	if (w_p)
+		return w_p->name;
+}
+
+inline static worker_t *worker_find_by_name(const char *name)
 {
 	worker_t *w_p;	
 	nl_list_for_each_entry(w_p, &workers.head.list, list) {
@@ -119,10 +126,11 @@ inline static void show_workers()
 {
 	worker_t *w_p;
 
-	printf("workers and incoming evtq:\n");
+	printf("workers:\n");
 	nl_list_for_each_entry(w_p, &workers.head.list, list) {
-		printf("worker=%ld name=%s\n", w_p->worker_id, w_p->name);
-		evtq_show(w_p->evtq_p);
+		printf("%ld:name=%s state=%s\n", w_p->worker_id,
+		       w_p->name,
+		       w_p->fsm_p->currst_p->name);
 	}
 }
 

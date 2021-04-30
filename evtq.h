@@ -89,7 +89,6 @@ extern void evtq_destroy(evtq_t* q_p);
 extern void evtq_destroy_all(evtq_t** q_pp);
 extern void evtq_push(evtq_t *evtq_p, fsm_events_t id);
 extern int evtq_show(evtq_t *evtq_p);
-// extern void evtq_push_all(evtq_t *evtq_pp[], fsm_events_t id);
 extern void evtq_pop(evtq_t *evtq_p, fsm_events_t* id_p);
 extern uint32_t evtq_len(evtq_t *evtq_p);
 extern int evt_ondemand(const char c);

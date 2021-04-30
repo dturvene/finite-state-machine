@@ -78,11 +78,7 @@ void evtq_push(evtq_t *evtq_p, fsm_events_t id)
 	pthread_cond_signal(&evtq_p->cond);
 	pthread_mutex_unlock(&evtq_p->mutex);
 
-	if (debug_flag) {
-		char msg[80];
-		snprintf(msg, sizeof(msg), "pop %s", evt_name[id]);
-		dbg(msg);
-	}
+	snprintf(msg, sizeof(msg), "%s", evt_name[id]);
 
 	relax();
 }
@@ -126,7 +122,7 @@ void evtq_pop(evtq_t *evtq_p, fsm_events_t* id_p)
 
 	if (debug_flag) {
 		char msg[80];
-		snprintf(msg, sizeof(msg), "pop %s", evt_name[*id_p]);
+		snprintf(msg, sizeof(msg), "%s", evt_name[*id_p]);
 		dbg(msg);
 	}
 }
@@ -181,12 +177,7 @@ int evtq_show(evtq_t *evtq_p)
 	pthread_mutex_unlock(&evtq_p->mutex);
 }
 
-/* forward definition */
-#if 0
-int evt_ondemand(const char c, evtq_t **evtq_pp);
-#else
 int evt_ondemand(const char c);
-#endif
 
 /**
  * evt_script - load events from a file to added to event queue
@@ -244,6 +235,7 @@ int evt_ondemand(const char c)
 	switch(c) {
 	case 'h':
 		printf("\tx: exit producer and workers (gracefully)\n");
+		printf("\tw: show workers and curr state\n");		
 		printf("\ti: %s\n", evt_name[EVT_IDLE]);
 		printf("\tt: %s\n", evt_name[EVT_TIMER]);
 		printf("\tr: run event input script %s\n", scriptfile);
@@ -254,6 +246,9 @@ int evt_ondemand(const char c)
 		/* exit event threads and main */
 		workers_evt_push(EVT_DONE);
 		event_loop_done = true;
+		break;
+	case 'w':
+		show_workers();
 		break;
 	case 'i':
 		workers_evt_push(EVT_IDLE);		

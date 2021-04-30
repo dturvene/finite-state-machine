@@ -69,7 +69,7 @@ inline static void relax()
 inline static void _dbg_func(const char *func, const char *msg)
 {
 	struct timespec ts;
-	char buf[80];
+	char buf[120];
 	int len;
 	
 	clock_gettime(CLOCK_MONOTONIC, &ts);

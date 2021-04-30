@@ -108,7 +108,7 @@ FSM2 state table:
 | ------------ | ----------- | ------------- | --------- |
 | FSM2@INIT    | YELLOW      | FSM2@NOWALK   |           |
 |              | RED         | FSM2@WALK     |           |
-| FSM2@WALK    | YELLOW      | FSM2@NOWALK   |           |
+| FSM2@WALK    | GREEN       | FSM2@NOWALK   |           |
 |              | DONE        | FSM2@DONE     |           |
 | FSM2@NOWALK  | RED         | FSM2@WALK     |           |
 |              | DONE        | FSM2@DONE     |           |

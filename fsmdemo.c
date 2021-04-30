@@ -134,7 +134,148 @@ void set_sig_handlers(void) {
 		die("sigint");
 }
 
+/************************* FSM data and tasks **********************/
+
+#define ACT_TRACE() do { \
+		fsm_state_t *state_p = (fsm_state_t*) arg; \
+		printf("%s:%s %s\n", worker_get_name(), __func__, state_p->name); \
+	} while(0);
+
+void act_enter(void *arg)
+{
+	ACT_TRACE();
+}
+
+void act_exit(void *arg)
+{
+	ACT_TRACE();
+}
+
+void act_t3(void *arg)
+{
+	ACT_TRACE();
+	
+	set_timer(fd_timer, 3000);
+}
+
+void act_green(void *arg)
+{
+	ACT_TRACE();
+	workers_evt_push(EVT_GREEN);
+}
+
+void act_yellow(void *arg)
+{
+	ACT_TRACE();
+	workers_evt_push(EVT_YELLOW);
+}
+
+void act_red(void *arg)
+{
+	ACT_TRACE();
+	workers_evt_push(EVT_RED);
+}
+
+
+void act_done(void *arg)
+{
+	ACT_TRACE();
+	pthread_exit(NULL);
+}
+
+fsm_state_t st_init = {"INIT", act_enter, act_exit};
+fsm_state_t st_done = {"DONE", act_done, NULL};
+fsm_state_t st_red = {"RED", act_red, act_exit};
+fsm_state_t st_green = {"GREEN", act_green, act_exit};
+fsm_state_t st_yellow = {"YELLOW", act_yellow, act_exit};
+
+fsm_trans_t FSM1[] = {
+	{&st_init, EVT_INIT, &st_red},
+	{&st_red, EVT_TIMER, &st_green},
+	{&st_red, EVT_DONE, &st_done},
+	{&st_green, EVT_TIMER, &st_yellow},
+	{&st_green, EVT_DONE, &st_done},	
+	{&st_yellow, EVT_TIMER, &st_red},
+	{&st_yellow, EVT_DONE, &st_done},	
+};
+
+fsm_state_t st_walk = {"WALK", act_enter, act_exit};
+fsm_state_t st_nowalk = {"DONT WALK", act_enter, act_exit};
+fsm_trans_t FSM2[] = {
+	{&st_init, EVT_INIT, &st_init},
+	{&st_init, EVT_YELLOW, &st_nowalk},
+	{&st_init, EVT_RED, &st_walk},
+	{&st_walk, EVT_GREEN, &st_nowalk},
+	{&st_walk, EVT_DONE, &st_done},
+	{&st_nowalk, EVT_RED, &st_walk},
+	{&st_nowalk, EVT_DONE, &st_done},	
+};
+
+fsm_state_t st_timer_init = {"T3 INIT", act_t3, act_exit};
+fsm_state_t st_run1 = {"RUN1", act_enter, act_exit};
+fsm_trans_t FSM3[] = {
+	{&st_timer_init, EVT_INIT, &st_run1},
+	{&st_run1, EVT_TIMER, &st_run1},
+	{&st_run1, EVT_DONE, &st_done},	
+};
+	
+/**
+ * fsm
+ */
+int fsm_run(worker_t* self_p, fsm_events_t evt_id)
+{
+	fsm_trans_t *fsm_p = self_p->fsm_p;
+	fsm_state_t *nextst_p;
+	int ret = 0;
+
+	nextst_p = next_state(fsm_p, evt_id);
+	if (nextst_p) {
+			
+		/* before transition to next state, run curr state
+		 * exit action
+		 */
+		if (fsm_p->currst_p->exit_action) {
+			fsm_p->currst_p->exit_action(fsm_p->currst_p);
+		}
+		fsm_p->currst_p = nextst_p;
+
+		/* run entry action after state transition */
+		if (fsm_p->currst_p->entry_action) {
+			fsm_p->currst_p->entry_action(fsm_p->currst_p);
+		}			
+	} else
+	{
+		char msg[120];
+		snprintf(msg, sizeof(msg), "No next for curr=%s, evt=%s",
+			fsm_p->currst_p->name, evt_name[evt_id]);
+		dbg(msg);
+		ret = -1;
+	}
+
+	return (ret);
+}
+
 /********************************** application logic *******************************/
+
+void *fsm_task(void *arg)
+{
+	evtq_t *evtq_self = worker_self()->evtq_p;
+	fsm_events_t evt_id;
+	int done = 0;
+	int ret = 0;
+
+	printf("%lu: %s\n", pthread_self(), __func__);
+
+	fsm_init(worker_self()->fsm_p);
+
+	while (!done) {
+		/* blocks until event is in queue */
+		evtq_pop(evtq_self, &evt_id);
+		ret = fsm_run(worker_self(), evt_id);
+	}
+	
+	dbg("exitting...");
+}
 
 /**
  * timer_task - pthread generating timer events to consumer
@@ -149,13 +290,10 @@ void set_sig_handlers(void) {
 void *timer_task(void *arg)
 {
 	workers_t* workers_p = (workers_t *) arg;
-	fsm_trans_t *fsm_p = worker_self()->fsm;
-	fsm_state_t *currst_p;
-	fsm_state_t *nextst_p;
 	evtq_t *evtq_self = worker_self()->evtq_p;
-	
 	fsm_events_t evt_id;
-	bool done = false;
+	int done = 0;
+	int ret;
 
 	int fd_epoll;                 /* epoll reference */
 	
@@ -176,11 +314,9 @@ void *timer_task(void *arg)
 		die("epoll_ctl for timerfd");
 
 	/* init timer FSM */
-	currst_p = fsm_p->curr;
-	if (currst_p->entry_action)
-		currst_p->entry_action(currst_p);
+	fsm_init(worker_self()->fsm_p);
 
-	while (EVT_DONE != evt_id) {
+	while (!done) {
 		int nfds; /* number of ready file descriptors */
 
 		/* set timeout to 200ms to check event queue */
@@ -199,16 +335,8 @@ void *timer_task(void *arg)
 			if (evtq_len(evtq_self) > 0)
 			{
 				evtq_pop(evtq_self, &evt_id);
-				nextst_p = next_state(currst_p, evt_id, fsm_p);
-				if (nextst_p) {
-					if (currst_p->exit_action) {
-						currst_p->exit_action(currst_p);
-					}
-					currst_p = nextst_p;
-					if (currst_p->entry_action)
-						currst_p->entry_action(currst_p);
-				}
-			} /* if */
+				ret = fsm_run(worker_self(), evt_id);
+			}
 		}
 		break;
 		default:
@@ -220,8 +348,7 @@ void *timer_task(void *arg)
 					die("bad incoming event");
 
 				if (events[i].data.fd == fd_timer) {
-					char msg[64];
-					
+					/* have to actually read timer to reset it for next period */
 					read(fd_timer, &res, sizeof(res));
 					workers_evt_push(EVT_TIMER);
 				}
@@ -232,90 +359,6 @@ void *timer_task(void *arg)
 	} /* while */
 	
 	dbg("exitting...");	
-}
-
-/************************* FSM data and tasks **********************/
-
-void act_enter(void *arg)
-{
-	fsm_state_t *state_p = (fsm_state_t*) arg;
-	printf("%ld %s: %s\n", pthread_self(), __func__, state_p->name);
-}
-
-void act_exit(void *arg)
-{
-	fsm_state_t *state_p = (fsm_state_t*) arg;
-	printf("%ld %s: %s\n", pthread_self(), __func__, state_p->name);
-}
-
-void act_t3(void *arg)
-{
-	fsm_state_t *state_p = (fsm_state_t*) arg;
-	printf("%s: %s\n", __func__, state_p->name);
-
-	set_timer(fd_timer, 3000);
-}
-
-fsm_state_t st_init = {"INIT", act_enter, act_exit};
-fsm_state_t st_done = {"DONE", act_enter, act_exit};
-fsm_state_t st_red = {"RED", act_enter, act_exit};
-fsm_state_t st_green = {"GREEN", act_enter, act_exit};
-fsm_state_t st_yellow = {"YELLOW", act_enter, act_exit};
-
-fsm_state_t st_timer_init = {"T3 INIT", act_t3, act_exit};
-fsm_state_t st_run1 = {"RUN1", act_enter, act_exit};
-
-fsm_trans_t FSM1[] = {
-	{&st_init, EVT_INIT, &st_red},
-	{&st_red, EVT_TIMER, &st_green},
-	{&st_red, EVT_DONE, &st_done},
-	{&st_green, EVT_TIMER, &st_yellow},
-	{&st_green, EVT_DONE, &st_done},	
-	{&st_yellow, EVT_TIMER, &st_red},
-	{&st_yellow, EVT_DONE, &st_done},	
-};
-
-fsm_trans_t FSM3[] = {
-	{&st_timer_init, EVT_INIT, &st_run1},
-	{&st_run1, EVT_TIMER, &st_run1},
-	{&st_run1, EVT_DONE, &st_run1},	
-};
-	
-/**
- * fsm
- */
-void *fsm_task(void *arg)
-{
-	workers_t* workers_p = (workers_t *) arg;
-	fsm_trans_t *fsm_p = worker_self()->fsm;
-	fsm_state_t *currst_p;
-	fsm_state_t *nextst_p;
-	
-	evtq_t *evtq_self = worker_self()->evtq_p;
-        fsm_events_t evt_id;
-
-	printf("%lu: %s\n", pthread_self(), __func__);		
-
-	currst_p = fsm_p->curr;
-	if (currst_p->entry_action)
-		currst_p->entry_action(currst_p);
-
-	while (evt_id != EVT_DONE)
-	{
-		/* blocks until event is in queue */
-		evtq_pop(evtq_self, &evt_id);
-		nextst_p = next_state(currst_p, evt_id, fsm_p);
-		if (nextst_p) {
-			if (currst_p->exit_action) {
-				currst_p->exit_action(currst_p);
-			}
-			currst_p = nextst_p;
-			if (currst_p->entry_action)
-				currst_p->entry_action(currst_p);
-		}
-	} /* while */
-	
-	dbg("exitting...");
 }
 
 /**
@@ -355,8 +398,7 @@ void evt_producer(void)
 	while (!event_loop_done) {
 		int nfds; /* number of ready file descriptors */
 
-		if (debug_flag)
-			dbg("poll_wait");
+		dbg("poll_wait");
 		
 		/* wait for desciptors or timeout 
 		 * n < 0: error
@@ -438,12 +480,10 @@ int main(int argc, char *argv[])
 
 	worker_list_create();
 	worker_list_add(fsm_create(&fsm_task, "stoplight", FSM1));
-#if 0
-	worker_list_add(worker_create(&timer_task, "timer"));
-#else
+	worker_list_add(fsm_create(&fsm_task, "crosswalk", FSM2));
 	worker_list_add(fsm_create(&timer_task, "timer", FSM3));
-#endif
-	// show_workers();
+
+	show_workers();
 
 	/* start your FSM! */
 	workers_evt_push(EVT_INIT);
@@ -453,6 +493,7 @@ int main(int argc, char *argv[])
 	/* if interrupted MGMT may not have sent the critical EVT_DONE 
 	 * to workers so do now.
 	 */
+	dbg("push final EVT_DONE");
 	workers_evt_push(EVT_DONE);
 	
 	dbg("waiting for joins");
