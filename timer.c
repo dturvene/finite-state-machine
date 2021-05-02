@@ -38,13 +38,17 @@ int create_timer(void)
  *
  * This is called from the timer thread to set, reset, cancel
  * a timer.  If ms == 0, the timer is cancelled.  If a running 
- * timer is called, the future timeout is reset to this value.
+ * timer is being set, the future timeout is reset to this value.
  */
 int set_timer(int timerfd, uint64_t tick_ms)
 {
 	struct itimerspec ts;
 	time_t sec;
 	long nsec;
+
+	if (debug_flag & DBG_TIMERS) {
+		printf("timer set to %lu msecs\n", tick_ms);
+	}
 
 	/* convert ms into timerfd argument 
 	 * special case for 0, which cancels the timer
@@ -92,4 +96,3 @@ uint64_t get_timer(int timerfd)
 
 	return (ts.it_value.tv_sec * 1000L + ts.it_value.tv_nsec / 1e6);
 }
-

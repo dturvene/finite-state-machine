@@ -32,21 +32,30 @@ static inline void fsm_init(fsm_trans_t *fsm_p)
 		fsm_p->currst_p->entry_action(fsm_p->currst_p);
 }
 
-static inline fsm_state_t *next_state(fsm_trans_t *fsm_p, int event)
+static inline void dbg_trans(const char* worker_name, fsm_trans_t *fsm_p,
+			     fsm_state_t *nextst_p, fsm_events_t evt_id)
 {
-	fsm_trans_t *t_p = fsm_p;
+	struct timespec ts;
+	char buf[120];
+	int len;
 
-	while (t_p->currst_p != NULL) {
-		if (t_p->currst_p == fsm_p->currst_p && t_p->event == event) {
-			char msg[80];
-			sprintf(msg, "match to %s\n", t_p->nextst_p->name);
-			dbg(msg);
-			return (t_p->nextst_p);
-		}
-		t_p++;
+	if (! debug_flag & DBG_TRANS)
+		return;
+			
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	len=snprintf(buf, sizeof(buf), "%s ts=%ld.%09ld %s to %s for evt=%s\n",
+		     worker_name,
+		     ts.tv_sec, ts.tv_nsec,
+		     fsm_p->currst_p->name, nextst_p->name,
+		     evt_name[evt_id]);
+	
+	/* if cannot fit entire string into buffer, force a newline and null at end */
+	if (len >= sizeof(buf)) {
+		buf[118] = '\n';
+		buf[119] = '\0';
 	}
-	dbg("No match");
-	return(NULL);
+	/* write string to STDOUT */
+	write(1, buf, strlen(buf));
 }
 
 #endif /* _FSM_H */

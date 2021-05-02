@@ -8,8 +8,9 @@
 
 #include <utils.h>
 #include <evtq.h>
+#include <workers.h>
 
-extern int debug_flag;
+extern uint32_t debug_flag;
 extern bool event_loop_done;
 extern char scriptfile[];
 
@@ -63,7 +64,7 @@ void evtq_destroy_all(evtq_t **q_pp)
  * signal condition that there is an new event queued
  * unlock queue
  */
-void evtq_push(evtq_t *evtq_p, fsm_events_t id)
+void evtq_push(evtq_t *evtq_p, fsm_events_t evt_id)
 {
 	struct fsm_event *ep;
 	char msg[80];
@@ -71,15 +72,14 @@ void evtq_push(evtq_t *evtq_p, fsm_events_t id)
 	pthread_mutex_lock(&evtq_p->mutex);
 	
 	ep = malloc( sizeof(struct fsm_event) );
-	ep->event_id = id;
+	ep->event_id = evt_id;
 	nl_list_add_tail(&ep->list, &evtq_p->head.list);
 	evtq_p->len++;
 
 	pthread_cond_signal(&evtq_p->cond);
 	pthread_mutex_unlock(&evtq_p->mutex);
 
-	snprintf(msg, sizeof(msg), "%s", evt_name[id]);
-
+	dbg_evts(evt_id);
 	relax();
 }
 
@@ -116,15 +116,11 @@ void evtq_pop(evtq_t *evtq_p, fsm_events_t* id_p)
 	nl_list_del(&ep->list);
 	evtq_p->len--;
 	*id_p = ep->event_id;
-	free(ep);		
+	free(ep);
 
 	pthread_mutex_unlock(&evtq_p->mutex);
 
-	if (debug_flag) {
-		char msg[80];
-		snprintf(msg, sizeof(msg), "%s", evt_name[*id_p]);
-		dbg(msg);
-	}
+	dbg_evts(*id_p);
 }
 
 /**
@@ -146,35 +142,6 @@ uint32_t evtq_len(evtq_t *evtq_p)
 	len = evtq_p->len;
 	pthread_mutex_unlock(&evtq_p->mutex);
 	return(len);
-}
-
-/**
- * evtq_show - dump of events in queue
- * @evtq_p - pointer to event queue
- *
- * This is used for diagnostic debugging, queues empty too fast
- * to use this during runtime.
- */
-int evtq_show(evtq_t *evtq_p)
-{
-	struct fsm_event *ep;
-	char msg[80];
-	int len;
-
-	pthread_mutex_lock(&evtq_p->mutex);
-
-	if (nl_list_empty(&evtq_p->head.list)) {
-		dbg("q empty");
-	}
-
-	nl_list_for_each_entry(ep, &evtq_p->head.list, list) {
-		sprintf(msg, "%d: id=%u", len++, ep->event_id);
-		dbg(msg);
-	}
-	sprintf(msg, "qsize: %d", evtq_p->len);
-	dbg(msg);
-
-	pthread_mutex_unlock(&evtq_p->mutex);
 }
 
 int evt_ondemand(const char c);
@@ -201,14 +168,18 @@ void evt_script(void)
 		/* skip comments and empty lines */
 		if (buf[0] == '#' || buf[0] == '\n')
 			continue;
-		
+
 		len = strlen(buf);
-		if (debug_flag)
-			printf("len=%d buf=%s", len, buf);
 		
+		if (debug_flag & DBG_DEEP)
+			printf("%s: len=%d buf=%s", __func__, len, buf);
+
+		/* for each char in this line of the script file 
+		 * check if is an alphanum and call evt_ondemand
+		 * to process event char
+		 */
 		for (int i=0; i<len; i++)
 			if (isalnum(buf[i]))
-				// evt_ondemand(buf[i], evtq_pp);
 				evt_ondemand(buf[i]);
 	}
 
@@ -216,26 +187,23 @@ void evt_script(void)
 }
 
 /**
- * evt_ondemand - translate symbolic event to internal and push to event q
+ * evt_ondemand - translate symbolic event to internal and push to all worker
+ * event queues.
  *
  * @c: the symbolic event id
  * @evtq_pp - array of event queue pointers
  * 
  * Each event can be symbolically represented as a single char.  This 
- * function maps this to an internal events id (from an enum) and
- * pushes it to the given event queue.
+ * function maps the char to an internal events id (from an enum) and
+ * pushes it to all workers.
  */
-#if 0
-int evt_ondemand(const char c, evtq_t **evtq_pp)
-#else
-#include <workers.h>
 int evt_ondemand(const char c)
-#endif
 {
 	switch(c) {
 	case 'h':
 		printf("\tx: exit producer and workers (gracefully)\n");
-		printf("\tw: show workers and curr state\n");		
+		printf("\tw: show workers and curr state\n");
+		printf("\tb: crosswalk button push\n");
 		printf("\ti: %s\n", evt_name[EVT_IDLE]);
 		printf("\tt: %s\n", evt_name[EVT_TIMER]);
 		printf("\tr: run event input script %s\n", scriptfile);
@@ -244,17 +212,20 @@ int evt_ondemand(const char c)
 		break;
 	case 'x':
 		/* exit event threads and main */
-		workers_evt_push(EVT_DONE);
+		workers_evt_broadcast(EVT_DONE);
 		event_loop_done = true;
 		break;
 	case 'w':
 		show_workers();
 		break;
+	case 'b':
+		workers_evt_broadcast(EVT_BUTTON);
+		break;
 	case 'i':
-		workers_evt_push(EVT_IDLE);		
+		workers_evt_broadcast(EVT_IDLE);		
 		break;
 	case 't':
-		workers_evt_push(EVT_TIMER);		
+		workers_evt_broadcast(EVT_TIMER);		
 		break;
 	case 'r':
 		evt_script();

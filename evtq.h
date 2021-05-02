@@ -30,6 +30,7 @@ typedef enum evt_id {
 	EVT_RED,
 	EVT_GREEN,
 	EVT_YELLOW,
+	EVT_BUTTON,
 	EVT_DONE,
 	EVT_LAST,
 } fsm_events_t;
@@ -39,12 +40,13 @@ typedef enum evt_id {
  */
 static const char * const evt_name[] = {
 	[EVT_BAD] = "Bad Evt",
-	[EVT_TIMER] = "Time Tick",
-	[EVT_IDLE] = "Idle",
+	[EVT_TIMER] = "TIMER",
+	[EVT_IDLE] = "IDLE",
 	[EVT_INIT] = "INIT",
 	[EVT_RED] = "RED",
 	[EVT_GREEN] = "GREEN",
 	[EVT_YELLOW] = "YELLOW",
+	[EVT_BUTTON] = "BUTTON",
 	[EVT_DONE] = "DONE",
 	[EVT_LAST] = "NULL",
 };
@@ -77,18 +79,19 @@ typedef struct {
 	pthread_cond_t cond;
 } evtq_t;
 
-static inline void evt_show(fsm_events_t evt_id, const char *msg)
+inline static void _dbg_evts(const char *func, fsm_events_t evt_id)
 {
-	char buff[80];
-	snprintf(buff, sizeof(buff), "%s %s", msg, evt_name[evt_id]);
-	dbg(buff);
+	char buf[120];
+	snprintf(buf, sizeof(buf), "%lu:%s %s\n", pthread_self(), func, evt_name[evt_id]);
+	write(1, buf, strlen(buf));
 }
+
+#define dbg_evts(evt_id) if (debug_flag & DBG_EVTS) _dbg_evts(__func__, evt_id);
 
 extern evtq_t* evtq_create(void);
 extern void evtq_destroy(evtq_t* q_p);
 extern void evtq_destroy_all(evtq_t** q_pp);
 extern void evtq_push(evtq_t *evtq_p, fsm_events_t id);
-extern int evtq_show(evtq_t *evtq_p);
 extern void evtq_pop(evtq_t *evtq_p, fsm_events_t* id_p);
 extern uint32_t evtq_len(evtq_t *evtq_p);
 extern int evt_ondemand(const char c);

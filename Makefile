@@ -27,7 +27,7 @@ evtq.o: evtq.c evtq.h utils.h
 timer.o: timer.c timer.h utils.h
 	$(CC) $(CFLAGS) -c $<
 
-fsmdemo: fsmdemo.o evtq.o timer.o
+fsmdemo: fsmdemo.o evtq.o timer.o fsm.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LIBS)
 
 %.o: %.c

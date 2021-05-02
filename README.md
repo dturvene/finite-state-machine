@@ -24,6 +24,22 @@ There are two substantial efforts under this project.
    
 2. The second uses the event delivery framework to build the 
    [FSM Example](#fsm-example): [fsmdemo](fsmdemo).
+   
+TODO
+----
+* describe each FSM as a pthread worker
+* an event is delivered to all FSM workers.  This has the advantage of a single
+  event-delivery function and all the logic of event handling is retained in
+  the FSM definitions.
+* UML State machine is good has a number of extensions for special case logic
+  that causes it to become complex and difficult to implement.  The focus of
+  this paper is a simple FSM.  If necessary, the complex logic is added to the
+  enter and exit actions.
+* FSM requirements: simple to understand, deterministic, minimal number of
+  events generated/consumed.
+* [UML](https://www.omg.org/spec/UML/2.2/Superstructure/PDF) too complex but
+  the notation is useful to concisely document each FSM.
+  
 
 FSM Overview
 ============
@@ -126,8 +142,8 @@ FSM3 state table:
 |             | DONE        | FSM3@DONE   |           |
 | FSM3@DONE   |             |             |           |
 
-* FSM3@RUN1 sets a 30 second timer
-* FSM3@RUN2 sets a timer to the shorter of 10 seconds or the remaining time 
+* FSM3@RUN1 sets an N1 second timer
+* FSM3@RUN2 sets a timer to the shorter of N2 seconds or the remaining time 
   in FSM3@RUN1
 
 Glossary and Definitions

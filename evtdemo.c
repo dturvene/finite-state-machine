@@ -250,7 +250,7 @@ void *evt_timer(void *arg)
 					char msg[64];
 					
 					read(fd_timer, &res, sizeof(res));
-					workers_evt_push(EVT_TIMER);
+					workers_evt_broadcast(EVT_TIMER);
 				}
 			}
 		}
@@ -428,7 +428,7 @@ int main(int argc, char *argv[])
 	/* if interrupted MGMT may not have sent the critical EVT_DONE 
 	 * to workers so do now.
 	 */
-	workers_evt_push(EVT_DONE);
+	workers_evt_broadcast(EVT_DONE);
 	
 	dbg("waiting for joins");
 	join_workers();

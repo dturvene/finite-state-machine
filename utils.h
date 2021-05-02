@@ -76,15 +76,21 @@ inline static void _dbg_func(const char *func, const char *msg)
 	len=snprintf(buf, sizeof(buf), "%lu:%s ts=%ld.%09ld %s\n", pthread_self(), func, ts.tv_sec, ts.tv_nsec, msg);
 	/* if cannot fit entire string into buffer, force a newline and null at end */
 	if (len >= sizeof(buf)) {
-		buf[78] = '\n';
-		buf[79] = '\0';
+		buf[118] = '\n';
+		buf[119] = '\0';
 	}
 	/* write string to STDOUT */
 	write(1, buf, strlen(buf));
 }
 
-extern int debug_flag;
-#define dbg(msg) if (debug_flag) _dbg_func(__func__, msg);
+uint32_t debug_flag;
+#define DBG_NONE    0x00
+#define DBG_TRANS   0x01  
+#define DBG_EVTS    0x02
+#define DBG_TIMERS  0x04
+#define DBG_DEEP    0x10
+
+#define dbg(msg) if (debug_flag & DBG_DEEP) _dbg_func(__func__, msg);
 
 #endif /* _UTILS_H */
 

@@ -104,7 +104,7 @@ inline static worker_t *worker_find_by_name(const char *name)
 	return(NULL);
 }
 
-inline static void workers_evt_push(fsm_events_t evt_id)
+inline static void workers_evt_broadcast(fsm_events_t evt_id)
 {
 	worker_t *w_p;
 	char msg[80];

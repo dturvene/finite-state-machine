@@ -21,6 +21,7 @@
 #include <evtq.h>
 #include <timer.h>
 #include <fsm.h>
+#include <fsm_defs.h>
 #include <workers.h>
 
 /**
@@ -31,7 +32,6 @@ bool event_loop_done = false;
 /* TODO move from global */
 int fd_timer;                 /* timerfd reference */
 
-
 /* max number of epoll events to wait for */
 #define MAX_WAIT_EVENTS 1
 
@@ -41,19 +41,19 @@ int fd_timer;                 /* timerfd reference */
 char *arguments = "\n"							\
 	" -s scriptfile: read events from file\n"			\
 	" -n: non-interactive mode (only read from scriptfile)\n"	\
-	" -d: set debug_flag\n"						\
+	" -d level: set debug_flag to hex level\n"			\
 	" -h: this help\n";
 
 /**
  * scriptfile - file name for event script to inject events
  * into consumer.
  */
-char scriptfile[64] = "./evtdemo.script";
+char scriptfile[64] = "./fsmdemo.script";
 
 /**
  * debug_flag - set the internal debug flag to print more info
  */
-int debug_flag = 0;
+extern uint32_t debug_flag;
 
 /**
  * non_interactive - If false then commands are accepted
@@ -78,7 +78,7 @@ int cmdline_args(int argc, char *argv[]) {
 	int opt;
 	int argcnt = 0;
 	
-	while((opt = getopt(argc, argv, "s:ndh")) != -1) {
+	while((opt = getopt(argc, argv, "s:nd:h")) != -1) {
 		switch(opt) {
 		case 's':
 			strncpy(scriptfile, optarg, sizeof(scriptfile)-1);
@@ -89,7 +89,7 @@ int cmdline_args(int argc, char *argv[]) {
 			non_interactive = true;
 			break;
 		case 'd':
-			debug_flag = 1;
+			debug_flag = strtoul(optarg, NULL, 0);
 			break;
 		case 'h':
 		default:			
@@ -134,127 +134,6 @@ void set_sig_handlers(void) {
 		die("sigint");
 }
 
-/************************* FSM data and tasks **********************/
-
-#define ACT_TRACE() do { \
-		fsm_state_t *state_p = (fsm_state_t*) arg; \
-		printf("%s:%s %s\n", worker_get_name(), __func__, state_p->name); \
-	} while(0);
-
-void act_enter(void *arg)
-{
-	ACT_TRACE();
-}
-
-void act_exit(void *arg)
-{
-	ACT_TRACE();
-}
-
-void act_t3(void *arg)
-{
-	ACT_TRACE();
-	
-	set_timer(fd_timer, 3000);
-}
-
-void act_green(void *arg)
-{
-	ACT_TRACE();
-	workers_evt_push(EVT_GREEN);
-}
-
-void act_yellow(void *arg)
-{
-	ACT_TRACE();
-	workers_evt_push(EVT_YELLOW);
-}
-
-void act_red(void *arg)
-{
-	ACT_TRACE();
-	workers_evt_push(EVT_RED);
-}
-
-
-void act_done(void *arg)
-{
-	ACT_TRACE();
-	pthread_exit(NULL);
-}
-
-fsm_state_t st_init = {"INIT", act_enter, act_exit};
-fsm_state_t st_done = {"DONE", act_done, NULL};
-fsm_state_t st_red = {"RED", act_red, act_exit};
-fsm_state_t st_green = {"GREEN", act_green, act_exit};
-fsm_state_t st_yellow = {"YELLOW", act_yellow, act_exit};
-
-fsm_trans_t FSM1[] = {
-	{&st_init, EVT_INIT, &st_red},
-	{&st_red, EVT_TIMER, &st_green},
-	{&st_red, EVT_DONE, &st_done},
-	{&st_green, EVT_TIMER, &st_yellow},
-	{&st_green, EVT_DONE, &st_done},	
-	{&st_yellow, EVT_TIMER, &st_red},
-	{&st_yellow, EVT_DONE, &st_done},	
-};
-
-fsm_state_t st_walk = {"WALK", act_enter, act_exit};
-fsm_state_t st_nowalk = {"DONT WALK", act_enter, act_exit};
-fsm_trans_t FSM2[] = {
-	{&st_init, EVT_INIT, &st_init},
-	{&st_init, EVT_YELLOW, &st_nowalk},
-	{&st_init, EVT_RED, &st_walk},
-	{&st_walk, EVT_GREEN, &st_nowalk},
-	{&st_walk, EVT_DONE, &st_done},
-	{&st_nowalk, EVT_RED, &st_walk},
-	{&st_nowalk, EVT_DONE, &st_done},	
-};
-
-fsm_state_t st_timer_init = {"T3 INIT", act_t3, act_exit};
-fsm_state_t st_run1 = {"RUN1", act_enter, act_exit};
-fsm_trans_t FSM3[] = {
-	{&st_timer_init, EVT_INIT, &st_run1},
-	{&st_run1, EVT_TIMER, &st_run1},
-	{&st_run1, EVT_DONE, &st_done},	
-};
-	
-/**
- * fsm
- */
-int fsm_run(worker_t* self_p, fsm_events_t evt_id)
-{
-	fsm_trans_t *fsm_p = self_p->fsm_p;
-	fsm_state_t *nextst_p;
-	int ret = 0;
-
-	nextst_p = next_state(fsm_p, evt_id);
-	if (nextst_p) {
-			
-		/* before transition to next state, run curr state
-		 * exit action
-		 */
-		if (fsm_p->currst_p->exit_action) {
-			fsm_p->currst_p->exit_action(fsm_p->currst_p);
-		}
-		fsm_p->currst_p = nextst_p;
-
-		/* run entry action after state transition */
-		if (fsm_p->currst_p->entry_action) {
-			fsm_p->currst_p->entry_action(fsm_p->currst_p);
-		}			
-	} else
-	{
-		char msg[120];
-		snprintf(msg, sizeof(msg), "No next for curr=%s, evt=%s",
-			fsm_p->currst_p->name, evt_name[evt_id]);
-		dbg(msg);
-		ret = -1;
-	}
-
-	return (ret);
-}
-
 /********************************** application logic *******************************/
 
 void *fsm_task(void *arg)
@@ -297,7 +176,6 @@ void *timer_task(void *arg)
 
 	int fd_epoll;                 /* epoll reference */
 	
-	uint64_t res;
 	struct epoll_event event;     /* struct to add to the epoll list */
 	struct epoll_event events[1]; /* struct return from epoll_wait */
 
@@ -348,9 +226,21 @@ void *timer_task(void *arg)
 					die("bad incoming event");
 
 				if (events[i].data.fd == fd_timer) {
-					/* have to actually read timer to reset it for next period */
+					uint64_t res;
+
+					/* have to actually read timer to reset it for next period 
+					 * the res value contains the number of expirations since
+					 * the last read.  This should be 1 because we read on every
+					 * expiry.
+					 */
 					read(fd_timer, &res, sizeof(res));
-					workers_evt_push(EVT_TIMER);
+					if (1 != res) {
+						printf("%s: ERROR timer expire res=%lu\n", __func__, res);
+					}
+							      
+					if (debug_flag & DBG_TIMERS)
+						printf("%s: timer expire\n", __func__);
+					workers_evt_broadcast(EVT_TIMER);
 				}
 			}
 		}
@@ -434,7 +324,7 @@ void evt_producer(void)
 					len=read(events[i].data.fd, buf, sizeof(buf));
 					/* replace CR with string termination */
 					buf[len] = '\0';
-					if (debug_flag)
+					if (debug_flag & DBG_DEEP)
 						printf("\nread %d: %s\n", len, buf);
 
 					// evt_ondemand(buf[0], evtq_pp);
@@ -486,7 +376,7 @@ int main(int argc, char *argv[])
 	show_workers();
 
 	/* start your FSM! */
-	workers_evt_push(EVT_INIT);
+	workers_evt_broadcast(EVT_INIT);
 
 	non_interactive ? evt_script() : evt_producer();
 
@@ -494,7 +384,7 @@ int main(int argc, char *argv[])
 	 * to workers so do now.
 	 */
 	dbg("push final EVT_DONE");
-	workers_evt_push(EVT_DONE);
+	workers_evt_broadcast(EVT_DONE);
 	
 	dbg("waiting for joins");
 	join_workers();
