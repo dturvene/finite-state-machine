@@ -39,7 +39,7 @@ static inline void dbg_trans(const char* worker_name, fsm_trans_t *fsm_p,
 	char buf[120];
 	int len;
 
-	if (! debug_flag & DBG_TRANS)
+	if (!(debug_flag & DBG_TRANS))
 		return;
 			
 	clock_gettime(CLOCK_MONOTONIC, &ts);

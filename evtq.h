@@ -25,6 +25,8 @@
 typedef enum evt_id {
 	EVT_BAD = 0,
 	EVT_TIMER,
+	EVT_TMR_LIGHT,
+	EVT_TMR_CROSS,	
 	EVT_IDLE,
 	EVT_INIT,
 	EVT_RED,
@@ -41,6 +43,8 @@ typedef enum evt_id {
 static const char * const evt_name[] = {
 	[EVT_BAD] = "Bad Evt",
 	[EVT_TIMER] = "TIMER",
+	[EVT_TMR_LIGHT] = "TIMER LIGHT",
+	[EVT_TMR_CROSS] = "TIMER CROSS",
 	[EVT_IDLE] = "IDLE",
 	[EVT_INIT] = "INIT",
 	[EVT_RED] = "RED",
@@ -79,10 +83,10 @@ typedef struct {
 	pthread_cond_t cond;
 } evtq_t;
 
-inline static void _dbg_evts(const char *func, fsm_events_t evt_id)
+static inline void _dbg_evts(const char *func, fsm_events_t evt_id)
 {
 	char buf[120];
-	snprintf(buf, sizeof(buf), "%lu:%s %s\n", pthread_self(), func, evt_name[evt_id]);
+	snprintf(buf, sizeof(buf), "%lu:%s %s\n", pthread_self(), func, evt_name[evt_id]);	
 	write(1, buf, strlen(buf));
 }
 

@@ -355,9 +355,6 @@ int main(int argc, char *argv[])
 {
 	int parsed_args;
 
-	// pthread_t task[2];
-	// evtq_t *evtq_pp[2];
-
 	parsed_args = cmdline_args(argc, argv);
 
 	/* show commandline arguments that are NOT handled

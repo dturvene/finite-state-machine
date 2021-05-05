@@ -83,14 +83,16 @@ inline static void _dbg_func(const char *func, const char *msg)
 	write(1, buf, strlen(buf));
 }
 
-uint32_t debug_flag;
+volatile uint32_t debug_flag;
 #define DBG_NONE    0x00
 #define DBG_TRANS   0x01  
 #define DBG_EVTS    0x02
 #define DBG_TIMERS  0x04
-#define DBG_DEEP    0x10
+#define DBG_WORKER  0x10
+#define DBG_DEEP    0x20
 
-#define dbg(msg) if (debug_flag & DBG_DEEP) _dbg_func(__func__, msg);
+#define dbg_verbose(msg) if (debug_flag & DBG_DEEP) _dbg_func(__func__, msg)
+#define dbg(msg) _dbg_func(__func__, msg)
 
 #endif /* _UTILS_H */
 

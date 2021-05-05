@@ -15,7 +15,7 @@ RM=rm -f
 all: $(BINS)
 
 # 
-evtdemo: evtdemo.o evtq.o timer.o
+evtdemo: evtdemo.o evtq.o timer.o cli.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LIBS)
 
 evtdemo.o: evtdemo.c workers.h utils.h

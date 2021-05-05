@@ -35,12 +35,24 @@ typedef struct workers {
 
 workers_t workers;
 
+inline static worker_t * worker_create_self(void *(*startfn_p)(void*), char* name)
+{
+	worker_t *w_p = malloc(sizeof(worker_t));
+
+	strncpy(w_p->name, name, sizeof(w_p->name));
+	w_p->fsm_p = NULL;
+	w_p->evtq_p = evtq_create();
+	if (0 != pthread_create(&w_p->worker_id, NULL, startfn_p, (void *)w_p))
+		die("worker_create");
+	return (w_p);
+}
+
 inline static worker_t * worker_create(void *(*startfn_p)(void*), char* name)
 {
 	worker_t *w_p = malloc(sizeof(worker_t));
 
 	strncpy(w_p->name, name, sizeof(w_p->name));
-
+	w_p->fsm_p = NULL;
 	w_p->evtq_p = evtq_create();
 	if (0 != pthread_create(&w_p->worker_id, NULL, startfn_p, (void *)&workers))
 		die("worker_create");
@@ -107,10 +119,16 @@ inline static worker_t *worker_find_by_name(const char *name)
 inline static void workers_evt_broadcast(fsm_events_t evt_id)
 {
 	worker_t *w_p;
-	char msg[80];
-
 	nl_list_for_each_entry(w_p, &workers.head.list, list) {
 		evtq_push(w_p->evtq_p, evt_id);
+	}
+}
+
+inline static void workers_evtq_destroy(void)
+{
+	worker_t *w_p;
+	nl_list_for_each_entry(w_p, &workers.head.list, list) {
+		evtq_destroy(w_p->evtq_p);
 	}
 }	
 
@@ -119,6 +137,7 @@ inline static void join_workers()
 	worker_t *w_p;
 	nl_list_for_each_entry(w_p, &workers.head.list, list) {
 		pthread_join(w_p->worker_id, NULL);
+		printf("%s: joined\n", w_p->name);
 	}
 }
 
@@ -128,9 +147,9 @@ inline static void show_workers()
 
 	printf("workers:\n");
 	nl_list_for_each_entry(w_p, &workers.head.list, list) {
-		printf("%ld:name=%s state=%s\n", w_p->worker_id,
-		       w_p->name,
-		       w_p->fsm_p->currst_p->name);
+		printf("%ld:name=%s\n", w_p->worker_id, w_p->name);
+		if (w_p->fsm_p)
+			printf(" state=%s\n", w_p->fsm_p->currst_p->name);
 	}
 }
 

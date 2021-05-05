@@ -51,11 +51,6 @@
 #include <timer.h>
 #include <workers.h>
 
-/**
- * cleanly exit event loop 
- */
-bool event_loop_done = false;
-
 /* max number of epoll events to wait for */
 #define MAX_WAIT_EVENTS 1
 
@@ -65,7 +60,7 @@ bool event_loop_done = false;
 char *arguments = "\n"							\
 	" -s scriptfile: read events from file\n"			\
 	" -n: non-interactive mode (only read from scriptfile)\n"	\
-	" -d: set debug_flag\n"						\
+	" -d level: set debug_flag to hex level\n"			\
 	" -h: this help\n";
 
 /**
@@ -73,11 +68,6 @@ char *arguments = "\n"							\
  * into consumer.
  */
 char scriptfile[64] = "./evtdemo.script";
-
-/**
- * debug_flag - set the internal debug flag to print more info
- */
-int debug_flag = 0;
 
 /**
  * non_interactive - If false then commands are accepted
@@ -102,7 +92,7 @@ int cmdline_args(int argc, char *argv[]) {
 	int opt;
 	int argcnt = 0;
 	
-	while((opt = getopt(argc, argv, "s:ndh")) != -1) {
+	while((opt = getopt(argc, argv, "s:nd:h")) != -1) {
 		switch(opt) {
 		case 's':
 			strncpy(scriptfile, optarg, sizeof(scriptfile)-1);
@@ -113,7 +103,7 @@ int cmdline_args(int argc, char *argv[]) {
 			non_interactive = true;
 			break;
 		case 'd':
-			debug_flag = 1;
+			debug_flag = strtoul(optarg, NULL, 0);
 			break;
 		case 'h':
 		default:			
@@ -138,9 +128,9 @@ int cmdline_args(int argc, char *argv[]) {
  */
 void sig_handler(int sig) {
 	char msg[80];
-	sprintf(msg, "\nCatch %s, set event_loop_done\n", strsignal(sig));
+	sprintf(msg, "\nCatch %s and exit\n", strsignal(sig));
 	write(1, msg, strlen(msg));
-	event_loop_done = true;
+	exit(0);
 }
 
 /**
@@ -161,108 +151,7 @@ void set_sig_handlers(void) {
 /********************************** application logic *******************************/
 
 /**
- * evt_timer - pthread generating timer events to consumer
- * @arg: event queue array created by controlling thread
- *
- * - create a periodic timer and set it to 1sec interval
- * - use epoll_wait with a short timeout to wait on timer expiration
- * - if epoll timeouts, check input queue
- * - if periodic timer expires, send EVT_TIMER to consumer
- * - this task receives all events but discards EVT_TIMER
- */
-void *evt_timer(void *arg)
-{
-	workers_t* workers_p = (workers_t *) arg;
-	worker_t *self = worker_self();
-	worker_t *consumer = worker_find_name("consumer");
-	evtq_t *evtq_self = self->evtq_p;
-	evtq_t *evtq_consumer = consumer->evtq_p;
-	
-	fsm_events_t evt_id;
-	bool done = false;
-
-	int fd_epoll;                 /* epoll reference */
-	int fd_timer;                 /* timerfd reference */
-	
-	uint64_t res;
-	struct epoll_event event;     /* struct to add to the epoll list */
-	struct epoll_event events[1]; /* struct return from epoll_wait */
-
-	/* create epoll */
-	if (-1 == (fd_epoll=epoll_create1(0)))
-		die("epoll");
-	
-	/* create an fd_timer and add to epoll list */
-	event.data.fd = fd_timer = create_timer();
-	event.events = EPOLLIN;
-	if (-1 == epoll_ctl(fd_epoll, EPOLL_CTL_ADD, event.data.fd, &event))
-		die("epoll_ctl for timerfd");
-
-	set_timer(fd_timer, 1000);
-
-	while (!done) {
-		int nfds; /* number of ready file descriptors */
-
-		if (debug_flag)
-			dbg("poll_wait");
-		
-		/* set timeout to 200ms to check event queue */
-		nfds=epoll_wait(fd_epoll, events, MAX_WAIT_EVENTS, 200);
-
-		switch(nfds) {
-		case -1:
-			/* if poll returns due to an signal interrupt then do nothing 
-			 * otherwise die
-			 */
-			if (errno != EINTR)
-				die("epoll_wait");
-			break;
-		case 0:
-		{
-			if (evtq_len(evtq_self) > 0)
-			{
-				evtq_pop(evtq_self, &evt_id);
-				
-				switch(evt_id) {
-				case EVT_DONE:
-					done = true;
-					break;
-				case EVT_TIMER: /* discard */
-					break;
-				case EVT_IDLE:
-					nap(1000);
-					break;
-				default:
-					break;
-				} /* switch */
-			} /* if */
-		}
-		break;
-		default:
-		{
-			int i;
-			for (i=0; i<nfds; i++) {
-				/* bad event or corrupted file descriptor */
-				if (!(events[i].events&EPOLLIN))
-					die("bad incoming event");
-
-				if (events[i].data.fd == fd_timer) {
-					char msg[64];
-					
-					read(fd_timer, &res, sizeof(res));
-					workers_evt_broadcast(EVT_TIMER);
-				}
-			}
-		}
-		break;
-		} /* switch */
-	} /* while */
-	
-	dbg("exitting...");	
-}		
-		
-/**
- * evt_consumer - archetype event consumer thread
+ * evt_c1 - archetype event consumer thread
  * @arg: event queue array created by controlling thread
  *
  * This is a simple framework:
@@ -270,24 +159,38 @@ void *evt_timer(void *arg)
  * - print the event
  * - if it is an EVT_DONE event end loop and exit
  */
-void *evt_consumer(void *arg)
+void *evt_c1(void *arg)
 {
-	workers_t* workers_p = (workers_t *) arg;
-	evtq_t *evtq_self = worker_self()->evtq_p;
+	worker_t* self_p = (worker_t *) arg;
+	evtq_t *evtq_self;
         fsm_events_t evt_id;
-	bool done = false;
 
 	dbg("enter and wait for fsm events");
-		
-	while (!done)
+
+	/* worker_self() loops through worker_list for match on pthread_self */
+	evtq_self = self_p->evtq_p;
+	while (true)
 	{
 		evtq_pop(evtq_self, &evt_id);
+		dbg_evts(evt_id);
 		
 		switch(evt_id) {
 		case EVT_TIMER:
 			break;
+		case EVT_TMR_LIGHT:
+			dbg("timer 2 (TMR_LIGHT) expiry");
+			break;
+		case EVT_TMR_CROSS:
+			dbg("timer 3 (TMR_CROSS) expiry");
+			break;
+		case EVT_INIT:
+			dbg("create 2 (EVT_TMR_LIGHT)");
+			create_timer(2, EVT_TMR_LIGHT);
+			dbg("set timer 2 TMR_LIGHT = 2000");
+			set_timer(2, 2000);		
+			break;
 		case EVT_DONE:
-			done = true;
+			pthread_exit(NULL);
 			break;
 		case EVT_IDLE:
 			nap(100);
@@ -301,6 +204,61 @@ void *evt_consumer(void *arg)
 }
 
 /**
+ * evt_c2 - archetype event consumer thread
+ * @arg: event queue array created by controlling thread
+ *
+ * This is a simple framework:
+ * - pop an event when it is available (evtq_pop blocks until then)
+ * - print the event
+ * - if it is an EVT_DONE event end loop and exit
+ */
+void *evt_c2(void *arg)
+{
+	worker_t* self_p = (worker_t *) arg;
+	evtq_t *evtq_self;
+        fsm_events_t evt_id;
+
+	dbg("enter and wait for fsm events");
+
+	/* worker_self() loops through worker_list for match on pthread_self */
+	evtq_self = self_p->evtq_p;
+	while (true)
+	{
+		evtq_pop(evtq_self, &evt_id);
+		dbg_evts(evt_id);
+		
+		switch(evt_id) {
+		case EVT_TIMER:
+			dbg("set 3 TMR_CROSS = 1000");			
+			set_timer(3, 1000);
+			break;
+#if 0			
+		case EVT_TMR_LIGHT:
+			break;
+#endif
+		case EVT_TMR_CROSS:
+			dbg("timer 3 (TMR_CROSS) expiry");
+			break;
+		case EVT_INIT:
+			dbg("create timer 3");
+			create_timer(3, EVT_TMR_CROSS);
+			break;
+		case EVT_IDLE:
+			nap(100);
+			break;
+		case EVT_DONE:
+			pthread_exit(NULL);
+			break;
+		default:
+			break;
+		} /* switch */
+	} /* while */
+	
+	dbg("exitting...");
+}
+
+
+/**
  * evt_producer - event production code to queue to evt_consumer
  * @arg: event queue created by controlling thread
  *
@@ -311,8 +269,7 @@ void *evt_consumer(void *arg)
  * - periodic timer: timer expiration when no fds are ready
  * - fd=STDIN: on-demand input from user, call to evt_ondemand() to process
  *
- * The loop will exit when the global event_loop_done is true, which can occur 
- * either from a signal handler or evt_ondemand() input.
+ * The loop will exit when 'x' is entered
  * 
  */
 void evt_producer(void)
@@ -320,6 +277,7 @@ void evt_producer(void)
 	int fd_epoll;                 /* epoll reference */
 	struct epoll_event event;     /* struct to add to the epoll list */
 	struct epoll_event events[MAX_WAIT_EVENTS]; /* struct return from epoll_wait */
+	int done = 0;
 
 	/* create epoll */
 	if (-1 == (fd_epoll=epoll_create1(0)))
@@ -332,13 +290,12 @@ void evt_producer(void)
 		die("epoll_ctl for STDIN");
 
 	/* event loop */
-	printf("Enter event, 'h' for help, 'x' to exit\n");
+	printf("%s: Enter event, 'h' for help, 'x' to exit\n", __func__);
 	fflush(stdout);
-	while (!event_loop_done) {
+	while (!done) {
 		int nfds; /* number of ready file descriptors */
 
-		if (debug_flag)
-			dbg("poll_wait");
+		dbg_verbose("poll_wait");
 		
 		/* wait for desciptors or timeout 
 		 * n < 0: error
@@ -374,17 +331,18 @@ void evt_producer(void)
 					len=read(events[i].data.fd, buf, sizeof(buf));
 					/* replace CR with string termination */
 					buf[len] = '\0';
-					if (debug_flag)
+					if (debug_flag & DBG_DEEP)
 						printf("\nread %d: %s\n", len, buf);
 
-					// evt_ondemand(buf[0], evtq_pp);
-					evt_ondemand(buf[0]);
+					done = evt_ondemand(buf[0]);
 				}
 			}
 		}
 		break;
 		} /* switch */
-	} /* while */	
+	} /* while */
+
+	dbg("exitting...");
 }
 
 /**
@@ -404,9 +362,7 @@ void evt_producer(void)
 int main(int argc, char *argv[])
 {
 	int parsed_args;
-
-	// pthread_t task[2];
-	// evtq_t *evtq_pp[2];
+	pthread_t timer_service;
 
 	parsed_args = cmdline_args(argc, argv);
 
@@ -416,26 +372,29 @@ int main(int argc, char *argv[])
 	for (int i=parsed_args; i<argc; i++) {
 		printf("%d: %s\n", i, argv[i]);
 	}
+
+	/* all threads in process use this */
 	set_sig_handlers();
+	
+	if (0 != pthread_create(&timer_service, NULL, timer_service_fn, NULL))
+		die("timer_service create");
 
 	worker_list_create();
-	worker_list_add(worker_create(&evt_consumer, "consumer"));
-	worker_list_add(worker_create(&evt_timer, "timer"));
-	// show_workers();	
+	worker_list_add(worker_create_self(&evt_c1, "consumer1"));
+	worker_list_add(worker_create_self(&evt_c2, "consumer2"));	
 
+	/* loop until 'x' entered */
 	non_interactive ? evt_script() : evt_producer();
 
-	/* if interrupted MGMT may not have sent the critical EVT_DONE 
-	 * to workers so do now.
+	/* kill timer_service thread 
+	 * dont use SIGINT, caught by the sig handler 
 	 */
-	workers_evt_broadcast(EVT_DONE);
+	// pthread_kill(timer_service, SIGHUP);
 	
-	dbg("waiting for joins");
+	printf("waiting for joins\n");
 	join_workers();
+	workers_evtq_destroy();
 
-	dbg("cleanup");
-	// evtq_destroy_all(evtq_pp);
-
-	dbg("exitting...");
+	printf("exitting...\n");
 }
 
