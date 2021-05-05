@@ -80,6 +80,20 @@ fsmtimer_t *find_timer_by_pollfd(int pollfd)
 	return(found_p);
 }
 
+void show_timers(void)
+{
+	fsmtimer_t* timer_p;
+	printf("%-2s:%-2s %-18s %-9s\n", "id", "fd", "event name", "msec val");
+	pthread_mutex_lock(&timer_list.mutex);
+	nl_list_for_each_entry(timer_p, &timer_list.head.list, list) {
+		printf("%2u:%2d evt=%14s msec=%5lu\n", timer_p->timerid,
+		       timer_p->fd,
+		       evt_name[timer_p->evtid],
+		       timer_p->tick_ms);
+	}
+	pthread_mutex_unlock(&timer_list.mutex);
+}
+
 /**
  * create_timer
  *

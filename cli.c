@@ -88,11 +88,12 @@ int evt_ondemand(const char c)
 		printf("\ti: %s\n", evt_name[EVT_IDLE]);
 		printf("\tt: %s\n", evt_name[EVT_TIMER]);
 		printf("\tr: run event input script %s\n", scriptfile);
+		printf("\ts: show current timers\n");
 		printf("\t1: toggle timer 1\n");
 		printf("\t2: toggle timer 2\n");
 		printf("\t3: toggle timer 3\n");		
 		printf("\tn: nap 5000ms\n");
-		printf("\tdefault: %s\n", evt_name[EVT_IDLE]);
+		printf("\tdefault: unknown command\n");
 		break;
 	case 'x':
 		/* exit event threads and main */
@@ -117,6 +118,9 @@ int evt_ondemand(const char c)
 			printf("fast 2: msec = %ld\n", msec);
 	}
 	break;
+	case 's':
+		show_timers();
+		break;
 	case '1':
 	case '2':
 	case '3':
@@ -138,7 +142,7 @@ int evt_ondemand(const char c)
 		evt_script();
 		break;
 	case 'n':
-		dbg("napping for 5000");		
+		dbg("begin nap");
 		nap(5000);
 		dbg("after nap");
 		break;

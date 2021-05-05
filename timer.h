@@ -44,6 +44,7 @@ extern int toggle_timer(uint32_t timerid);
 extern void* timer_service_fn(void *arg);
 extern fsmtimer_t *find_timer_by_id(uint32_t timerid);
 extern fsmtimer_t *find_timer_by_pollfd(int pollfd);
+extern void show_timers(void);
 
 static inline uint64_t get_msec(uint32_t timerid)
 {

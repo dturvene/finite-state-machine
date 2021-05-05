@@ -297,13 +297,14 @@ void evt_producer(void)
 
 		dbg_verbose("poll_wait");
 		
-		/* wait for desciptors or timeout 
-		 * n < 0: error
-		 * n == 0: timeout arg in ms, -1 no timeout
-		 * n > 0: number of descriptors with pending I/O
-		 */
+		/* wait for desciptors or timeout (in ms, -1 no timeout) */
 		nfds=epoll_wait(fd_epoll, events, MAX_WAIT_EVENTS, -1);
 
+		/* 
+		 * nfds < 0: error
+		 * nfds == 0: timeout
+		 * nfds > 0: number of descriptors with pending I/O
+		 */
 		switch(nfds) {
 		case -1:
 			/* if poll returns due to an signal interrupt then do nothing 

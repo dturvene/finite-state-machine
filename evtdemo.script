@@ -1,25 +1,29 @@
 # default script to regression test evtdemo.c
 # ./evtdemo -n
-# start workers
+# send workers go event to run
 g
-# nap
+# main thread nap to let the workers run a little
 n
-# start t3 using EVT_TIMER
+# send EVT_TIMER to workers
 t
-# nap
+# nap to capture worker responses
 n
-# toggle off timer 3 and 2
+# toggle-off timers 3 and 2
 3 2
-# nap
-n
-# toggle on 2 and set to fast timer
+# check for unknown command and show help
+z h
+# nap to flush prior timer events and then again to confirm no more timer expiry
+n n
+# toggle-on 2 and set it to fast timer
 2 f
+# show current timers
+s
 # nap
 n
-# slow timer 2
+# set timer 2 to slow
 f
 # nap for two times
 n n
-# exit
+# exit all threads and join
 x
 # script eof
