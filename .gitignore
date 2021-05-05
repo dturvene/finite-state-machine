@@ -5,11 +5,22 @@
 # Ignore all
 *
 
-# Unignore all with extensions
+# unignore this hidden file so it will be saved
+!.gitignore
+
+# Unignore source
 !*.c
 !*.h
 !Makefile
-!.gitignore
+!README.md
+
+# unignore for regression test and gdb
+!.script
+!.gdb
+
+# unignore diagrams using dia, markdown accepts png
+!.dia
+!.png
 
 # ignore temp and manufactured files
 *.o

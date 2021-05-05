@@ -16,9 +16,11 @@ typedef struct fsm_state {
 	action exit_action;
 } fsm_state_t;
 
+typedef bool (*constraint)(void *arg);
 typedef struct fsm_trans {
 	fsm_state_t *currst_p;
 	int event;
+	constraint guard;
 	fsm_state_t *nextst_p;
 } fsm_trans_t;
 

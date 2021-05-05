@@ -20,10 +20,10 @@ developing this code is as follows:
 There are two substantial efforts under this project.
 
 1. The first is to develop a simple, reliable event delivery framework to/from
-   a set of POSIX threads and the Thread Manager: [evtdemo](#evtdemo).
+   a set of POSIX "worker" threads: [evtdemo](#evtdemo).
    
 2. The second uses the event delivery framework to build the 
-   [FSM Example](#fsm-example): [fsmdemo](fsmdemo).
+   [FSM Example](#fsm-example): [fsmdemo](#fsmdemo).
    
 TODO
 ----
@@ -40,7 +40,6 @@ TODO
 * [UML](https://www.omg.org/spec/UML/2.2/Superstructure/PDF) too complex but
   the notation is useful to concisely document each FSM.
   
-
 FSM Overview
 ============
 A DFSM is essentially a set of states, each accepting a subset of all FSM
@@ -49,8 +48,7 @@ accepted by the current state will either be discarded or cause an error.  It
 is possible that an error will cause the FSM to generate an error event to
 another FSM alerting it to a possible FSM bug.
 
-One common FSM reference is the 
-[OMG UML State Machine](https://en.wikipedia.org/wiki/UML_state_machine). 
+. 
 It is a good reference but, for the purpose of this project, too complex.  It
 has a number of FSM extensions that strength the model but, in my opinion, 
 confuse the theory.  For example, there is a **state** and a more powerful
@@ -59,18 +57,13 @@ usually a static boolean or counter) that will allow/prohibit the transition to
 the state. The effect of the guard condition is that an event WILL cause a
 state transition or it WILL NOT. This breaks the definition of a DFSM.
 
-DFSM Architecture
-=================
-<!--
-https://www.codeproject.com/Articles/1275479/State-Machine-Design-in-C
-https://aticleworld.com/state-machine-using-c
-https://en.wikipedia.org/wiki/UML_state_machine
-https://www.omg.org/spec/UML/About-UML/
-https://www.omg.org/spec/UML/2.2/Superstructure/PDF
--->
+Glossary and Definitions
+========================
+* [C language](https://en.wikipedia.org/wiki/C_(programming_language))
+* [DFSM](https://en.wikipedia.org/wiki/Deterministic_finite_automaton): 
+  Deterministic Finite State Machine
+* `$K`: the root of the Linux kernel source tree
 
-The FSM is structured as a table of tuples: current state, event, new state.
-Each state has an entry action and an exit action.
 
 FSM Example
 ===========
@@ -85,74 +78,41 @@ concepts.  In this example, there are four threads:
 
 3. `FSM2` is the thread for the crosswalk.
 
-4. `FSM3` is the timer thread, generating TIMER events when the current timer
-   expires.
+4. `TSRV` is the timer service.
 
-MGMT has no states but can generate the following events from a user
+The `MGMT` thread has no states but can generate on-demand events from a user
 interface or script file.
 
-* INIT: Start FSM
-* BUTTON: the walk request button
-* TIMER: FSM test (normally this event is generated from FSM3)
-* DONE: exit the state machine and thread
+`TSRV` is a service used by the other threads to create/manage timers and timer
+events.  A worker creates and sets a timer with the TSRV thread using the
+`fsmtimer` API.  The `fsmtimer` API has an internal mutex to protect against
+race conditions.  When a timer expires, the `TSRV` delivers the corresponding
+event to all worker threads.
 
-INIT and DONE could be modelled outside of the state machines since they are
-universal but it is cleaner to reduce special-purpose logic to the FSM.
-Also there may be a future FSM requirement to do something different when
-receiving these events (e.g. FSM1 wait until the FSM1@YELLOW transitions to
-FSM1@RED before exiting.)
+Each FSM worker thread is built around a unique FSM state table, described
+below using the State Machines Notation from 
+[OMG UML v2.5.1](https://www.omg.org/spec/UML/2.5.1/).
 
-Each state is documented as `FSM@STATE` where `FSM` is a unique class of state
-machine and `STATE` is a unique state within the the FSM class. 
+The FSM mechanisms use a small subset of features in the State Machines chapter
+of [OMG UML v2.5.1](https://www.omg.org/spec/UML/2.5.1/). However, all the
+features of each FSM are defined in the UML doc.
 
-FSM1 state table:
+Each FSM is structured as a table of tuples: current state, event, new state.
+Each state has an entry action and an exit action.
 
-| STATE         | EVENT IN | NEWSTATE       | EVENT OUT |
-| ------------- | -------- | -------------- | --------- |
-| FSM1@INIT     | INIT     | FSM1@RED       |           |
-| FSM1@RED      | TIMER    | FSM1@GREEN     | GREEN     |
-|               | DONE     | FSM1@DONE      |           |
-| FSM1@GREEN    | TIMER    | FSM1@YELLOW    | YELLOW    |
-|               | DONE     | FSM1@DONE      |           |
-| FSM1@YELLOW   | TIMER    | FSM1@RED       | RED       |
-|               | DONE     | FSM1@DONE      |           |
-| FSM1@DONE     |          |                |           |
+As described in [OMG UML v2.5.1]() paragraph 14.2.4.8, a transition (event) may
+have a guard condition. This boolean condition will allow the transition if
+`true` and deny it if `false`.  In otherwords, if the guard condition returns
+`false` the transition to the next state will not be completed and the event
+will be discarded.
 
-FSM2 state table:
+FSM1 (stoplight) state diagram
+------------------------------
+![FSM1](fsm_stoplight.png)
 
-| STATE        | EVENT IN    | NEWSTATE      | EVENT OUT |
-| ------------ | ----------- | ------------- | --------- |
-| FSM2@INIT    | YELLOW      | FSM2@NOWALK   |           |
-|              | RED         | FSM2@WALK     |           |
-| FSM2@WALK    | GREEN       | FSM2@NOWALK   |           |
-|              | DONE        | FSM2@DONE     |           |
-| FSM2@NOWALK  | RED         | FSM2@WALK     |           |
-|              | DONE        | FSM2@DONE     |           |
-| FSM2@DONE    |             |               |           |
-
-FSM3 state table:
-
-| STATE       | EVENT IN    | NEWSTATE    | EVENT OUT |
-| ----------- | ----------- | ----------- | --------- |
-| FSM3@INIT   | INIT        | FSM3@RUN1   |           |
-| FSM3@RUN1   | TIMER       | FSM3@RUN1   | TIMER     |
-|             | BUTTON      | FSM3@RUN2   | TIMER     |
-|             | DONE        | FSM3@DONE   |           |
-| FSM3@RUN2   | TIMER       | FSM3@RUN1   |           |
-|             | DONE        | FSM3@DONE   |           |
-| FSM3@DONE   |             |             |           |
-
-* FSM3@RUN1 sets an N1 second timer
-* FSM3@RUN2 sets a timer to the shorter of N2 seconds or the remaining time 
-  in FSM3@RUN1
-
-Glossary and Definitions
-========================
-* [C language](https://en.wikipedia.org/wiki/C_(programming_language))
-* [DFSM](https://en.wikipedia.org/wiki/Deterministic_finite_automaton): 
-  Deterministic Finite State Machine
-  
-* `$K`: the root of the Linux kernel source tree
+FSM1 (crosswalk) state diagram
+------------------------------
+![FSM2](fsm_crosswalk.png)
 
 Software Overview
 =================
@@ -255,9 +215,14 @@ syntax.
 evtdemo
 =======
 The first program, `evtdemo.c` is an event delivery framework based on a
-producer/consumer architecture.  MGMT sends `fsm_events` to two threads, a
-consumer thread that loops printing `fsm_events` and a timer thread that
-generates TIMER events to the consumer thread.
+producer/consumer architecture.  MGMT sends `fsm_events` to two worker threads.
+Each worker thread will call the TSRV API to create and start one or more
+timers managed by the TSRV thread.
+
+The `TSRV` thread uses the Linux
+[epoll](https://man7.org/linux/man-pages/man7/epoll.7.html) and
+[timerfd](https://man7.org/linux/man-pages/man2/timerfd_create.2.html)
+APIs to implement timers. It can support a maximum of four concurrent timers.
 
 See the inline documentation for more information.
 
@@ -266,7 +231,3 @@ fsmdemo
 This program implements the [FSM Example](#fsm-example) using the `evtdemo.c`
 framework.
 
-`FSM3` uses the Linux
-[epoll](https://man7.org/linux/man-pages/man7/epoll.7.html) and
-[timerfd](https://man7.org/linux/man-pages/man2/timerfd_create.2.html)
-APIs.
