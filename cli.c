@@ -6,25 +6,25 @@
  * command line interface for the FSM project
  */
 
+#include <sys/epoll.h>   /* epoll_ctl */
+
 #include <utils.h>
 #include <timer.h>
 #include <evtq.h>
 #include <workers.h>
 
-
 /* default or set in the program arguments */
 extern char scriptfile[];
 
-/* forward ref for evt_script */
-int evt_ondemand(const char c);
+/* max number of epoll events to wait for */
+#define MAX_WAIT_EVENTS 1
 
 /**
  * evt_script - load events from a file to added to event queue
  *
  * The input file is reference by the global scriptfile var.
  * 
- * This is just a shell to read the file for symbolic event ids.  The 
- * events are translate from symbolic to events enum in evt_ondemand()
+ * This is just a shell to read a file for symbolic events
  */
 void evt_script(void)
 {
@@ -53,109 +53,187 @@ void evt_script(void)
 		if (debug_flag & DBG_DEEP)
 			printf("%s: len=%d buf=%s", __func__, len, buf);
 
-		/* for each char in this line of the script file 
-		 * check if is an alphanum and call evt_ondemand
-		 * to process event char
-		 */
-		for (int i=0; i<len; i++)
-			if (isalnum(buf[i]))
-				evt_ondemand(buf[i]);
+		/* call event parser */
+		evt_parse_buf(buf);
 	}
 
 	fclose(fin);
 }
 
 /**
- * evt_ondemand - translate symbolic event to internal and push to all worker
+ * evt_parse_buf - translate symbolic event string to events and push to all worker
  * event queues.
  *
- * @c: the symbolic event id
+ * @buf: the symbolic event string
  * 
- * Each event can be symbolically represented as a single char.  This 
- * function maps the char to an internal events id (from an enum) and
+ * Each input event can be symbolically represented as a one or more characters.  
+ * This function maps the chars to an internal event id (defined in evtq.h) and
  * pushes it to all workers.
  */
-int evt_ondemand(const char c)
+int evt_parse_buf(const char const *buf)
 {
 	int ret = 0;
-	switch(c) {
-	case 'h':
-		printf("\tx: exit producer and workers (gracefully)\n");
-		printf("\tw: show workers and curr state\n");
-		printf("\tb: crosswalk button push\n");
-		printf("\tg: go %s\n", evt_name[EVT_INIT]);
-		printf("\tf: set timer fast\n");
-		printf("\ti: %s\n", evt_name[EVT_IDLE]);
-		printf("\tt: %s\n", evt_name[EVT_TIMER]);
-		printf("\tr: run event input script %s\n", scriptfile);
-		printf("\ts: show current timers\n");
-		printf("\t1: toggle timer 1\n");
-		printf("\t2: toggle timer 2\n");
-		printf("\t3: toggle timer 3\n");		
-		printf("\tn: nap 5000ms\n");
-		printf("\tdefault: unknown command\n");
-		break;
-	case 'x':
-		/* exit event threads and main */
-		workers_evt_broadcast(EVT_DONE);
-		ret = 1;
-		break;
-	case 'w':
-		show_workers();
-		break;
-	case 'g':
-		workers_evt_broadcast(EVT_INIT);
-		break;
-	case 'f':
-	{
-		uint64_t msec = get_msec(2);
+	const char *sp = buf;
 
-		if (msec == 500)
-			set_timer(2, 2000);
-		else if (msec == 2000)
-			set_timer(2, 500);
-		else
-			printf("fast 2: msec = %ld\n", msec);
-	}
-	break;
-	case 's':
-		show_timers();
-		break;
-	case '1':
-	case '2':
-	case '3':
-	{
-		uint32_t timerid = (uint32_t)(c - 0x30); /* ascii char to int */
-		toggle_timer(timerid);
-	}
-	break;
-	case 'b':
-		workers_evt_broadcast(EVT_BUTTON);
-		break;
-	case 'i':
-		workers_evt_broadcast(EVT_IDLE);		
-		break;
-	case 't':
-		workers_evt_broadcast(EVT_TIMER);		
-		break;
-	case 'r':
-		evt_script();
-		break;
-	case 'n':
-		dbg("begin nap");
-		nap(5000);
-		dbg("after nap");
-		break;
-	default:
-	{
-		char msg[80];
-		sprintf(msg, "unknown command: '%c'", c);
-		dbg(msg);
-	}
-	break;
-	} /* switch */
+	while (*sp) {
+		if (isalnum(*sp)) {
+			switch(*sp) {
+			case 'h':
+				printf("\tx: exit producer and workers (gracefully)\n");
+				printf("\tw: show workers and curr state\n");
+				printf("\tb: crosswalk button push\n");
+				printf("\tg: go %s\n", evt_name[E_INIT]);
+				printf("\tf: set timer fast\n");
+				printf("\ti: %s\n", evt_name[E_IDLE]);
+				printf("\ttN: toggle timer N\n");
+				printf("\tr: run event input script %s\n", scriptfile);
+				printf("\ts: show current timers\n");
+				printf("\tn: main thread nap 5000ms"
+				      "(worker/timer threads keep running)\n");
+				printf("\tdefault: unknown command\n");
+				break;
+			case 'x':
+				/* exit event threads and main */
+				workers_evt_broadcast(E_DONE);
+				ret = 1;
+				break;
+			case 'w':
+				show_workers();
+				break;
+			case 'g':
+				workers_evt_broadcast(E_INIT);
+				break;
+			case 'f':
+			{
+				uint64_t msec = get_msec(2);
+				
+				if (msec == 500)
+					set_timer(2, 2000);
+				else if (msec == 2000)
+					set_timer(2, 500);
+				else
+					printf("fast 2: msec = %ld\n", msec);
+			}
+			break;
+			case 'b':
+				workers_evt_broadcast(E_BUTTON);
+				break;
+			case 'i':
+				workers_evt_broadcast(E_IDLE);		
+				break;
+			case 's':
+				show_workers();
+				show_timers();
+				break;
+			case 't':
+			{
+				/* get next char and convert to int */
+				uint32_t timerid = (uint32_t)(*++sp - 0x30);
+				toggle_timer(timerid);
+			}
+			break;
+			case 'r':
+				evt_script();
+				break;
+			case 'n':
+				dbg("begin nap");
+				nap(5000);
+				dbg("after nap");
+				break;
+			default:
+				printf("%c: unknown cmd\n", *sp);
+				break;
+			} /* switch */
+		} /* if isalnum */
+		sp++;  /* next char */
+	} /* while */
 
 	return(ret);
 }
 
 
+/**
+ * evt_producer - event producer to queue to workers
+ *
+ * This function has several notable mechanisms. The main one is a 
+ * man:epoll loop to handle input from several sources:
+ * - epoll error: many error types but this will exit when a signal is received 
+ *   (which we ignore for SIGINT handling)
+ * - fd=STDIN: on-demand input from user, call to evt_ondemand() to process
+ *
+ * The loop will exit when 'x' is entered
+ * 
+ */
+void evt_producer(void)
+{
+	int fd_epoll;                 /* epoll reference */
+	struct epoll_event event;     /* struct to add to the epoll list */
+	struct epoll_event events[MAX_WAIT_EVENTS]; /* struct return from epoll_wait */
+	int done = 0;
+
+	/* create epoll */
+	if (-1 == (fd_epoll=epoll_create1(0)))
+		die("epoll");
+
+	/* add stdin to epoll for user control */
+	event.data.fd = STDIN_FILENO;
+	event.events = EPOLLIN;
+	if (-1 == epoll_ctl(fd_epoll, EPOLL_CTL_ADD, event.data.fd, &event))
+		die("epoll_ctl for STDIN");
+
+	/* event loop */
+	printf("%s: Enter commands (g:start FSMs, h:help, x:exit)\n", __func__);
+	fflush(stdout);
+	while (!done) {
+		int nfds; /* number of ready file descriptors */
+
+		dbg_verbose("poll_wait");
+		
+		/* wait for desciptors or timeout (in ms, -1 no timeout) */
+		nfds=epoll_wait(fd_epoll, events, MAX_WAIT_EVENTS, -1);
+
+		/* 
+		 * nfds < 0: error
+		 * nfds == 0: timeout
+		 * nfds > 0: number of descriptors with pending I/O
+		 */
+		switch(nfds) {
+		case -1:
+			/* if poll returns due to an signal interrupt then do nothing 
+			 * otherwise die
+			 */
+			if (errno != EINTR)
+				die("epoll_wait");
+			break;
+		case 0:
+			dbg("epoll timeout");
+		break;
+		default:
+		{
+			int i;
+			for (i=0; i<nfds; i++) {
+				/* bad event or corrupted file descriptor */
+				if (!(events[i].events&EPOLLIN))
+					die("bad incoming event");
+
+				if (events[i].data.fd == STDIN_FILENO) {
+					char buf[32];
+					int len;
+					
+					/* line buffered by tty driver so must hit CR to read */
+					len=read(events[i].data.fd, buf, sizeof(buf));
+					/* replace CR with string termination */
+					buf[len] = '\0';
+					if (debug_flag & DBG_DEEP)
+						printf("\nread %d: %s\n", len, buf);
+
+					done = evt_parse_buf(buf);
+				}
+			}
+		}
+		break;
+		} /* switch */
+	} /* while */
+
+	dbg("exitting...");
+}

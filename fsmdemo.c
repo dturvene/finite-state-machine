@@ -3,7 +3,6 @@
  * Copyright (C) 2021 Dahetral Systems
  * Author: David Turvene (dturvene@dahetral.com)
  *
- * FSM
  */
 
 #include <stdlib.h>      /* atoi, malloc, strtol, strtoll, strtoul */
@@ -16,24 +15,12 @@
 #include <signal.h>      /* sigaction */
 #include <string.h>      /* strlen, strsignal,, memset */
 #include <pthread.h>     /* posix threads */
-#include <sys/epoll.h>   /* epoll_ctl */
 #include <utils.h>
 #include <evtq.h>
 #include <timer.h>
 #include <fsm.h>
 #include <fsm_defs.h>
 #include <workers.h>
-
-/**
- * cleanly exit event loop 
- */
-bool event_loop_done = false;
-
-/* TODO move from global */
-int fd_timer;                 /* timerfd reference */
-
-/* max number of epoll events to wait for */
-#define MAX_WAIT_EVENTS 1
 
 /**
  * arguments - descriptive string for all commandline arguments
@@ -48,12 +35,7 @@ char *arguments = "\n"							\
  * scriptfile - file name for event script to inject events
  * into consumer.
  */
-char scriptfile[64] = "./fsmdemo.script";
-
-/**
- * debug_flag - set the internal debug flag to print more info
- */
-extern uint32_t debug_flag;
+char scriptfile[64] = "./evtdemo.script";
 
 /**
  * non_interactive - If false then commands are accepted
@@ -114,9 +96,9 @@ int cmdline_args(int argc, char *argv[]) {
  */
 void sig_handler(int sig) {
 	char msg[80];
-	sprintf(msg, "\nCatch %s, set event_loop_done\n", strsignal(sig));
+	sprintf(msg, "\nCatch %s and exit\n", strsignal(sig));
 	write(1, msg, strlen(msg));
-	event_loop_done = true;
+	exit(0);
 }
 
 /**
@@ -136,205 +118,27 @@ void set_sig_handlers(void) {
 
 /********************************** application logic *******************************/
 
+/**
+ * fsm_task - archetype event consumer thread
+ * @arg: worker_t context
+ *
+ */
 void *fsm_task(void *arg)
 {
-	evtq_t *evtq_self = worker_self()->evtq_p;
-	fsm_events_t evt_id;
-	int done = 0;
-	int ret = 0;
+	worker_t* self_p = (worker_t*) arg;
+        fsm_events_t evt_id;
 
-	printf("%lu: %s\n", pthread_self(), __func__);
+	fsm_init(self_p->fsm_p);
 
-	fsm_init(worker_self()->fsm_p);
-
-	while (!done) {
-		/* blocks until event is in queue */
-		evtq_pop(evtq_self, &evt_id);
-		ret = fsm_run(worker_self(), evt_id);
+	/* worker_self() loops through worker_list for match on pthread_self */
+	while (true)
+	{
+		evtq_pop(self_p->evtq_p, &evt_id);
+		dbg_evts(evt_id);
+		fsm_run(self_p->fsm_p, evt_id);
 	}
 	
 	dbg("exitting...");
-}
-
-/**
- * timer_task - pthread generating timer events to consumer
- * @arg: event queue array created by controlling thread
- *
- * - create a periodic timer and set it to 1sec interval
- * - use epoll_wait with a short timeout to wait on timer expiration
- * - if epoll timeouts, check input queue
- * - if periodic timer expires, send EVT_TIMER to consumer
- * - this task receives all events but discards EVT_TIMER
- */
-void *timer_task(void *arg)
-{
-	workers_t* workers_p = (workers_t *) arg;
-	evtq_t *evtq_self = worker_self()->evtq_p;
-	fsm_events_t evt_id;
-	int done = 0;
-	int ret;
-
-	int fd_epoll;                 /* epoll reference */
-	
-	struct epoll_event event;     /* struct to add to the epoll list */
-	struct epoll_event events[1]; /* struct return from epoll_wait */
-
-	printf("%lu: %s\n", pthread_self(), __func__);
-
-	/* create epoll */
-	if (-1 == (fd_epoll=epoll_create1(0)))
-		die("epoll");
-	
-	/* create an fd_timer and add to epoll list */
-	event.data.fd = fd_timer = create_timer();
-	event.events = EPOLLIN;
-	if (-1 == epoll_ctl(fd_epoll, EPOLL_CTL_ADD, event.data.fd, &event))
-		die("epoll_ctl for timerfd");
-
-	/* init timer FSM */
-	fsm_init(worker_self()->fsm_p);
-
-	while (!done) {
-		int nfds; /* number of ready file descriptors */
-
-		/* set timeout to 200ms to check event queue */
-		nfds=epoll_wait(fd_epoll, events, MAX_WAIT_EVENTS, 200);
-
-		switch(nfds) {
-		case -1:
-			/* if poll returns due to an signal interrupt then do nothing 
-			 * otherwise die
-			 */
-			if (errno != EINTR)
-				die("epoll_wait");
-			break;
-		case 0:
-		{
-			if (evtq_len(evtq_self) > 0)
-			{
-				evtq_pop(evtq_self, &evt_id);
-				ret = fsm_run(worker_self(), evt_id);
-			}
-		}
-		break;
-		default:
-		{
-			int i;
-			for (i=0; i<nfds; i++) {
-				/* bad event or corrupted file descriptor */
-				if (!(events[i].events&EPOLLIN))
-					die("bad incoming event");
-
-				if (events[i].data.fd == fd_timer) {
-					uint64_t res;
-
-					/* have to actually read timer to reset it for next period 
-					 * the res value contains the number of expirations since
-					 * the last read.  This should be 1 because we read on every
-					 * expiry.
-					 */
-					read(fd_timer, &res, sizeof(res));
-					if (1 != res) {
-						printf("%s: ERROR timer expire res=%lu\n", __func__, res);
-					}
-							      
-					if (debug_flag & DBG_TIMERS)
-						printf("%s: timer expire\n", __func__);
-					workers_evt_broadcast(EVT_TIMER);
-				}
-			}
-		}
-		break;
-		} /* switch */
-	} /* while */
-	
-	dbg("exitting...");	
-}
-
-/**
- * evt_producer - event production code to queue to evt_consumer
- * @arg: event queue created by controlling thread
- *
- * This machine has several notable mechanisms. The main one is a 
- * man:epoll loop to handle input from several sources:
- * - epoll error: many error types but this will exit when a signal is received 
- *   (which we ignore for SIGINT handling)
- * - periodic timer: timer expiration when no fds are ready
- * - fd=STDIN: on-demand input from user, call to evt_ondemand() to process
- *
- * The loop will exit when the global event_loop_done is true, which can occur 
- * either from a signal handler or evt_ondemand() input.
- * 
- */
-void evt_producer(void)
-{
-	int fd_epoll;                 /* epoll reference */
-	struct epoll_event event;     /* struct to add to the epoll list */
-	struct epoll_event events[MAX_WAIT_EVENTS]; /* struct return from epoll_wait */
-
-	/* create epoll */
-	if (-1 == (fd_epoll=epoll_create1(0)))
-		die("epoll");
-
-	/* add stdin to epoll for user control */
-	event.data.fd = STDIN_FILENO;
-	event.events = EPOLLIN;
-	if (-1 == epoll_ctl(fd_epoll, EPOLL_CTL_ADD, event.data.fd, &event))
-		die("epoll_ctl for STDIN");
-
-	/* event loop */
-	printf("Enter event, 'h' for help, 'x' to exit\n");
-	fflush(stdout);
-	while (!event_loop_done) {
-		int nfds; /* number of ready file descriptors */
-
-		dbg("poll_wait");
-		
-		/* wait for desciptors or timeout 
-		 * n < 0: error
-		 * n == 0: timeout arg in ms, -1 no timeout
-		 * n > 0: number of descriptors with pending I/O
-		 */
-		nfds=epoll_wait(fd_epoll, events, MAX_WAIT_EVENTS, -1);
-
-		switch(nfds) {
-		case -1:
-			/* if poll returns due to an signal interrupt then do nothing 
-			 * otherwise die
-			 */
-			if (errno != EINTR)
-				die("epoll_wait");
-			break;
-		case 0:
-			dbg("epoll timeout");
-		break;
-		default:
-		{
-			int i;
-			for (i=0; i<nfds; i++) {
-				/* bad event or corrupted file descriptor */
-				if (!(events[i].events&EPOLLIN))
-					die("bad incoming event");
-
-				if (events[i].data.fd == STDIN_FILENO) {
-					char buf[2];
-					int len;
-					
-					/* line buffered by tty driver so must hit CR to read */
-					len=read(events[i].data.fd, buf, sizeof(buf));
-					/* replace CR with string termination */
-					buf[len] = '\0';
-					if (debug_flag & DBG_DEEP)
-						printf("\nread %d: %s\n", len, buf);
-
-					// evt_ondemand(buf[0], evtq_pp);
-					evt_ondemand(buf[0]);
-				}
-			}
-		}
-		break;
-		} /* switch */
-	} /* while */	
 }
 
 /**
@@ -354,6 +158,7 @@ void evt_producer(void)
 int main(int argc, char *argv[])
 {
 	int parsed_args;
+	pthread_t timer_service;
 
 	parsed_args = cmdline_args(argc, argv);
 
@@ -363,32 +168,34 @@ int main(int argc, char *argv[])
 	for (int i=parsed_args; i<argc; i++) {
 		printf("%d: %s\n", i, argv[i]);
 	}
+
+	/* all threads in process use this */
 	set_sig_handlers();
 
+	/* create timer service and start it running */
+	if (0 != pthread_create(&timer_service, NULL, timer_service_fn, NULL))
+		die("timer_service create");
+
 	worker_list_create();
-	worker_list_add(fsm_create(&fsm_task, "stoplight", FSM1));
-	worker_list_add(fsm_create(&fsm_task, "crosswalk", FSM2));
-	worker_list_add(fsm_create(&timer_task, "timer", FSM3));
+	worker_list_add(worker_fsm_create(&fsm_task, "stoplight", FSM1));
+	worker_list_add(worker_fsm_create(&fsm_task, "crosswalk", FSM2));
 
-	show_workers();
+	/* TODO: create timers in FSMs? */
+	create_timer(TID_LIGHT, E_LIGHT);
+	create_timer(TID_BLINK, E_BLINK);
 
-	/* start your FSM! */
-	workers_evt_broadcast(EVT_INIT);
-
+	/* loop until 'x' entered */
 	non_interactive ? evt_script() : evt_producer();
 
-	/* if interrupted MGMT may not have sent the critical EVT_DONE 
-	 * to workers so do now.
-	 */
-	dbg("push final EVT_DONE");
-	workers_evt_broadcast(EVT_DONE);
+	/* cancel timer_service thread */
+	dbg("cancel timer_service and join");
+	pthread_cancel(timer_service);
+	pthread_join(timer_service, NULL);
 	
-	dbg("waiting for joins");
+	dbg("waiting for worker joins");
 	join_workers();
+	workers_evtq_destroy();
 
-	dbg("cleanup");
-	// evtq_destroy_all(evtq_pp);
-
-	dbg("exitting...");
+	dbg("exitting...\n");
 }
 

@@ -4,7 +4,7 @@
 g
 # main thread nap to let the workers run a little
 n
-# send EVT_TIMER to workers
+# send E_TIMER to workers
 t
 # nap to capture worker responses
 n

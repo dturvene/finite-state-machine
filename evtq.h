@@ -23,36 +23,36 @@
  * fsm_events_t - enum containg all events
  */
 typedef enum evt_id {
-	EVT_BAD = 0,
-	EVT_TIMER,
-	EVT_TMR_LIGHT,
-	EVT_TMR_CROSS,	
-	EVT_IDLE,
-	EVT_INIT,
-	EVT_RED,
-	EVT_GREEN,
-	EVT_YELLOW,
-	EVT_BUTTON,
-	EVT_DONE,
-	EVT_LAST,
+	E_BAD = 0,
+	E_LIGHT,
+	E_BLINK,
+	E_IDLE,
+	E_INIT,
+	E_RED,
+	E_GREEN,
+	E_YELLOW,
+	E_BUTTON,
+	E_DONE,
+	E_TIMER,
+	E_LAST,
 } fsm_events_t;
 
 /*
  * evt_name - mapping from evt_id to a text string for debugging
  */
 static const char * const evt_name[] = {
-	[EVT_BAD] = "Bad Evt",
-	[EVT_TIMER] = "TIMER",
-	[EVT_TMR_LIGHT] = "TIMER LIGHT",
-	[EVT_TMR_CROSS] = "TIMER CROSS",
-	[EVT_IDLE] = "IDLE",
-	[EVT_INIT] = "INIT",
-	[EVT_RED] = "RED",
-	[EVT_GREEN] = "GREEN",
-	[EVT_YELLOW] = "YELLOW",
-	[EVT_BUTTON] = "BUTTON",
-	[EVT_DONE] = "DONE",
-	[EVT_LAST] = "NULL",
+	[E_BAD] = "BAD EVT",
+	[E_LIGHT] = "LIGHT TIMER",
+	[E_BLINK] = "WALK BLINK",
+	[E_IDLE] = "IDLE",
+	[E_INIT] = "INIT",
+	[E_RED] = "RED",
+	[E_GREEN] = "GREEN",
+	[E_YELLOW] = "YELLOW",
+	[E_BUTTON] = "BUTTON",
+	[E_DONE] = "DONE",
+	[E_TIMER] = "TIMER TEST",
+	[E_LAST] = "LAST",
 };
 
 /**
@@ -98,8 +98,9 @@ extern void evtq_destroy_all(evtq_t** q_pp);
 extern void evtq_push(evtq_t *evtq_p, fsm_events_t id);
 extern void evtq_pop(evtq_t *evtq_p, fsm_events_t* id_p);
 extern uint32_t evtq_len(evtq_t *evtq_p);
-extern int evt_ondemand(const char c);
+extern int evt_parse_buf(const char const *buf);
 extern void evt_script(void);
+extern void evt_producer(void);
 
 #endif /* _EVTQ_H */
 

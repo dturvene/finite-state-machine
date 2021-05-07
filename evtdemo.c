@@ -21,8 +21,8 @@
  * Next the main thread sits on a blocking epoll_wait to read symbolic
  * fsm_events from STDIN. It translates to internal events and sends to all 
  * fsm_event queues.  Symbolic events can also be read from a script 
- * file.  See evt_producer and evt_ondemand for the logic.
- * When the producer sends an EVT_DONE, all threads will exit their respective  
+ * file.  See evt_producer and evt_parse_buf for the logic.
+ * When the producer sends an E_DONE, all threads will exit their respective  
  * event loops.
  *
  * The consumer thread event loop blocks on pthead_cond_wait until signalled that 
@@ -157,7 +157,7 @@ void set_sig_handlers(void) {
  * This is a simple framework:
  * - pop an event when it is available (evtq_pop blocks until then)
  * - print the event
- * - if it is an EVT_DONE event end loop and exit
+ * - if it is an E_DONE event end loop and exit
  */
 void *evt_c1(void *arg)
 {
@@ -175,24 +175,24 @@ void *evt_c1(void *arg)
 		dbg_evts(evt_id);
 		
 		switch(evt_id) {
-		case EVT_TIMER:
+		case E_TIMER:
 			break;
-		case EVT_TMR_LIGHT:
+		case E_TMR_LIGHT:
 			dbg("timer 2 (TMR_LIGHT) expiry");
 			break;
-		case EVT_TMR_CROSS:
+		case E_TMR_CROSS:
 			dbg("timer 3 (TMR_CROSS) expiry");
 			break;
-		case EVT_INIT:
-			dbg("create 2 (EVT_TMR_LIGHT)");
-			create_timer(2, EVT_TMR_LIGHT);
+		case E_INIT:
+			dbg("create 2 (E_TMR_LIGHT)");
+			create_timer(2, E_TMR_LIGHT);
 			dbg("set timer 2 TMR_LIGHT = 2000");
 			set_timer(2, 2000);		
 			break;
-		case EVT_DONE:
+		case E_DONE:
 			pthread_exit(NULL);
 			break;
-		case EVT_IDLE:
+		case E_IDLE:
 			nap(100);
 			break;
 		default:
@@ -210,7 +210,7 @@ void *evt_c1(void *arg)
  * This is a simple framework:
  * - pop an event when it is available (evtq_pop blocks until then)
  * - print the event
- * - if it is an EVT_DONE event end loop and exit
+ * - if it is an E_DONE event end loop and exit
  */
 void *evt_c2(void *arg)
 {
@@ -228,25 +228,25 @@ void *evt_c2(void *arg)
 		dbg_evts(evt_id);
 		
 		switch(evt_id) {
-		case EVT_TIMER:
+		case E_TIMER:
 			dbg("set 3 TMR_CROSS = 1000");			
 			set_timer(3, 1000);
 			break;
 #if 0			
-		case EVT_TMR_LIGHT:
+		case E_TMR_LIGHT:
 			break;
 #endif
-		case EVT_TMR_CROSS:
+		case E_TMR_CROSS:
 			dbg("timer 3 (TMR_CROSS) expiry");
 			break;
-		case EVT_INIT:
+		case E_INIT:
 			dbg("create timer 3");
-			create_timer(3, EVT_TMR_CROSS);
+			create_timer(3, E_TMR_CROSS);
 			break;
-		case EVT_IDLE:
+		case E_IDLE:
 			nap(100);
 			break;
-		case EVT_DONE:
+		case E_DONE:
 			pthread_exit(NULL);
 			break;
 		default:
@@ -259,18 +259,7 @@ void *evt_c2(void *arg)
 
 
 /**
- * evt_producer - event production code to queue to evt_consumer
- * @arg: event queue created by controlling thread
- *
- * This machine has several notable mechanisms. The main one is a 
- * man:epoll loop to handle input from several sources:
- * - epoll error: many error types but this will exit when a signal is received 
- *   (which we ignore for SIGINT handling)
- * - periodic timer: timer expiration when no fds are ready
- * - fd=STDIN: on-demand input from user, call to evt_ondemand() to process
- *
- * The loop will exit when 'x' is entered
- * 
+ * TODO: copy 
  */
 void evt_producer(void)
 {
@@ -387,15 +376,15 @@ int main(int argc, char *argv[])
 	/* loop until 'x' entered */
 	non_interactive ? evt_script() : evt_producer();
 
-	/* kill timer_service thread 
-	 * dont use SIGINT, caught by the sig handler 
-	 */
-	// pthread_kill(timer_service, SIGHUP);
+	/* cancel timer_service thread */
+	dbg("cancel timer_service and join\n");
+	pthread_cancel(timer_service);
+	pthread_join(timer_service, NULL);
 	
-	printf("waiting for joins\n");
+	dbg("waiting for worker joins\n");
 	join_workers();
 	workers_evtq_destroy();
 
-	printf("exitting...\n");
+	dbg("exitting...\n");
 }
 

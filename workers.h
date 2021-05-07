@@ -35,7 +35,7 @@ typedef struct workers {
 
 workers_t workers;
 
-inline static worker_t * worker_create_self(void *(*startfn_p)(void*), char* name)
+inline static worker_t * worker_create(void *(*startfn_p)(void*), char* name)
 {
 	worker_t *w_p = malloc(sizeof(worker_t));
 
@@ -47,24 +47,16 @@ inline static worker_t * worker_create_self(void *(*startfn_p)(void*), char* nam
 	return (w_p);
 }
 
-inline static worker_t * worker_create(void *(*startfn_p)(void*), char* name)
+inline static worker_t *worker_fsm_create(void *(*startfn_p)(void*), char* name, fsm_trans_t* fsm_p)
 {
-	worker_t *w_p = malloc(sizeof(worker_t));
+	worker_t *w_p = malloc(sizeof(worker_t));	
 
 	strncpy(w_p->name, name, sizeof(w_p->name));
-	w_p->fsm_p = NULL;
+	w_p->fsm_p = fsm_p; /* must set this before starting thread fsm_init */
 	w_p->evtq_p = evtq_create();
-	if (0 != pthread_create(&w_p->worker_id, NULL, startfn_p, (void *)&workers))
+	if (0 != pthread_create(&w_p->worker_id, NULL, startfn_p, (void *)w_p))
 		die("worker_create");
-	return (w_p);
-}
-
-inline static worker_t *fsm_create(void *(*startfn_p)(void*), char* name, fsm_trans_t* fsm_p)
-{
-	worker_t *w_p;
-
-	w_p = worker_create(startfn_p, name);
-	w_p->fsm_p = fsm_p;
+	return(w_p);
 }
 
 inline static void worker_list_create()
@@ -132,24 +124,24 @@ inline static void workers_evtq_destroy(void)
 	}
 }	
 
-inline static void join_workers()
+inline static void join_workers(void)
 {
 	worker_t *w_p;
 	nl_list_for_each_entry(w_p, &workers.head.list, list) {
 		pthread_join(w_p->worker_id, NULL);
-		printf("%s: joined\n", w_p->name);
+		if (debug_flag & DBG_WORKER)
+			printf("%s: joined\n", w_p->name);
 	}
 }
 
-inline static void show_workers()
+inline static void show_workers(void)
 {
 	worker_t *w_p;
 
-	printf("workers:\n");
+	printf("workers\n%-15s:%-12s %-14s\n", "id", "name", "[curr_state]");
 	nl_list_for_each_entry(w_p, &workers.head.list, list) {
-		printf("%ld:name=%s\n", w_p->worker_id, w_p->name);
-		if (w_p->fsm_p)
-			printf(" state=%s\n", w_p->fsm_p->currst_p->name);
+		printf("%ld:%-12s ", w_p->worker_id, w_p->name);
+		w_p->fsm_p ? printf("%s\n", w_p->fsm_p->currst_p->name) : printf("\n");
 	}
 }
 

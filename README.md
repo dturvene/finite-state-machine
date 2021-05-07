@@ -97,9 +97,6 @@ The FSM mechanisms use a small subset of features in the State Machines chapter
 of [OMG UML v2.5.1](https://www.omg.org/spec/UML/2.5.1/). However, all the
 features of each FSM are defined in the UML doc.
 
-Each FSM is structured as a table of tuples: current state, event, new state.
-Each state has an entry action and an exit action.
-
 As described in [OMG UML v2.5.1]() paragraph 14.2.4.8, a transition (event) may
 have a guard condition. This boolean condition will allow the transition if
 `true` and deny it if `false`.  In otherwords, if the guard condition returns
@@ -110,12 +107,34 @@ FSM1 (stoplight) state diagram
 ------------------------------
 ![FSM1](fsm_stoplight.png)
 
-FSM1 (crosswalk) state diagram
+FSM2 (crosswalk) state diagram
 ------------------------------
 ![FSM2](fsm_crosswalk.png)
 
 Software Overview
 =================
+
+FSM Definition
+--------------
+An FSM is defined as a set of Transitions from one state to the next when an
+Event is injected into the FSM driver function.
+
+The following data structures are used to programmatically define an
+FSM. The structures are organized from most elemental to 
+  
+* Event : A simple enum of event symbols, each using an `E_` prefix.
+  See `evt_q.h` for documentation.
+
+* State: A structure defining a specific state, with entry and exit actions.
+  See `fsm.h` for documentation.
+
+* Transition: A structure defining a current state, next state and the event
+  that causes the transition. See `fsm.h` for documentation.
+
+* FSM: A simple array of transition instances. See `fsm_defs.h` for documentation.
+
+Software APIs
+-------------
 Per the [Abstract](#abstract), I am focussing on the Linux kernel and device
 drivers.  The code is developed in C and, where possible, mimics the 
 [Linux kernel API](https://www.kernel.org/doc/html/v5.11/core-api/kernel-api.html)
@@ -137,8 +156,8 @@ The APIs used in this project include the following.
 * `pthread_mutex_` calls are comparable to the mutex APIs documented in
   [locking](https://www.kernel.org/doc/html/v5.1/kernel-hacking/locking.html)
   
-Alternative Implementations
-===========================
+Alternative API Implementations
+-------------------------------
 These are some of the kernel mechanisms I investigated as alternatives to the
 classic `mutex/cond_wait` and linked list APIs from above.  The [FIFO](#fifo) and
 [reader-writer lock](#reader-writer-lock) are worthy of more investigation to
@@ -179,8 +198,8 @@ The
 [Kernel workqueue](https://www.kernel.org/doc/html/v5.11/core-api/workqueue.html) 
 mechanism is attractive but too complex for the purpose of this project.
 
-Kernel RCU lock
----------------
+Kernel RCU
+----------
 The 
 [Kernel RCU](https://www.kernel.org/doc/html/v5.11/RCU/index.html) mechanism is
 another powerful API.  Essentially it protects concurrent access by

@@ -83,7 +83,7 @@ fsmtimer_t *find_timer_by_pollfd(int pollfd)
 void show_timers(void)
 {
 	fsmtimer_t* timer_p;
-	printf("%-2s:%-2s %-18s %-9s\n", "id", "fd", "event name", "msec val");
+	printf("timers\n%-2s:%-2s %-18s %-9s\n", "id", "fd", "event name", "msec val");
 	pthread_mutex_lock(&timer_list.mutex);
 	nl_list_for_each_entry(timer_p, &timer_list.head.list, list) {
 		printf("%2u:%2d evt=%14s msec=%5lu\n", timer_p->timerid,
@@ -234,8 +234,10 @@ int toggle_timer(uint32_t timerid)
 {
 	fsmtimer_t *timer_p = find_timer_by_id(timerid);
 
-	if (NULL == timer_p)
-		die("toggle_timer unknown timer");
+	if (NULL == timer_p) {
+		printf("%s: unknown timer %d\n", __func__, timerid);
+		return (-1);
+	}
 	
 	if (0 != timer_p->tick_ms) {
 		dbg_timer(timer_p->timerid, "timer off");
@@ -244,22 +246,22 @@ int toggle_timer(uint32_t timerid)
 		dbg_timer(timer_p->timerid, "timer restore");		
 		set_timer_p(timer_p, timer_p->old_tick_ms);
 	}
+
+	return(0);
 }
 
 /**
  * timer_service_fn - pthread generating timer events to consumer
  * @arg: event queue array created by controlling thread
  *
- * - create a periodic timer and set it to 1sec interval
  * - use epoll_wait with a short timeout to wait on timer expiration
- * - if epoll timeouts, check input queue
- * - if periodic timer expires, send EVT_TIMER to consumer
- * - this task receives all events but discards EVT_TIMER
+ * 
+ * thread loops forever until program exits or a pthread_cancel is sent
+ * to it.
  */
 void *timer_service_fn(void *arg)
 {
 	fsm_events_t evt_id;
-	bool done = false;
 	struct epoll_event events[MAX_TIMERS];
 	uint64_t res;
 
@@ -271,7 +273,10 @@ void *timer_service_fn(void *arg)
 	if (-1 == (fd_epoll=epoll_create1(0)))
 		die("epoll");
 	
-	while (!done) {
+	if (0 != pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL))
+		die("pthread_setcancelstate");
+	
+	while (1) {
 		int nfds; /* number of ready file descriptors */
 
 		/* set timeout to 200ms because workers may create_timer */
@@ -313,6 +318,4 @@ void *timer_service_fn(void *arg)
 		break;
 		} /* switch */
 	} /* while */
-	
-	dbg("exitting...");	
 }
