@@ -16,6 +16,9 @@
 /* default or set in the program arguments */
 extern char scriptfile[];
 
+/* default or set in the program arguments */
+extern uint32_t tick;
+
 /* max number of epoll events to wait for */
 #define MAX_WAIT_EVENTS 1
 
@@ -79,20 +82,20 @@ int evt_parse_buf(const char const *buf)
 		if (isalnum(*sp)) {
 			switch(*sp) {
 			case 'h':
-				printf("\tx: exit producer and workers (gracefully)\n");
+				printf("\tx,q: exit producer and workers (gracefully)\n");
 				printf("\tw: show workers and curr state\n");
 				printf("\tb: crosswalk button push\n");
 				printf("\tg: go %s\n", evt_name[E_INIT]);
 				printf("\tf: set timer fast\n");
-				printf("\ti: %s\n", evt_name[E_IDLE]);
 				printf("\ttN: toggle timer N\n");
 				printf("\tr: run event input script %s\n", scriptfile);
-				printf("\ts: show current timers\n");
-				printf("\tn: main thread nap 5000ms"
+				printf("\ts: show current FSM state\n");
+				printf("\tn: main thread nap 5 ticks\n"
 				      "(worker/timer threads keep running)\n");
 				printf("\tdefault: unknown command\n");
 				break;
 			case 'x':
+			case 'q':
 				/* exit event threads and main */
 				workers_evt_broadcast(E_DONE);
 				ret = 1;
@@ -118,12 +121,9 @@ int evt_parse_buf(const char const *buf)
 			case 'b':
 				workers_evt_broadcast(E_BUTTON);
 				break;
-			case 'i':
-				workers_evt_broadcast(E_IDLE);		
-				break;
 			case 's':
-				show_workers();
 				show_timers();
+				show_workers();
 				break;
 			case 't':
 			{
@@ -136,10 +136,14 @@ int evt_parse_buf(const char const *buf)
 				evt_script();
 				break;
 			case 'n':
-				dbg("begin nap");
-				nap(5000);
-				dbg("after nap");
-				break;
+			{
+				/* get next char and convert to int */
+				uint32_t len = (uint32_t)(*++sp - 0x30);
+				dbg_verbose("begin nap");
+				nap(len*tick);
+				dbg_verbose("after nap");
+			}
+			break;
 			default:
 				printf("%c: unknown cmd\n", *sp);
 				break;

@@ -3,6 +3,9 @@
  * Copyright (C) 2021 Dahetral Systems
  * Author: David Turvene (dturvene@dahetral.com)
  *
+ *
+ * regression test:
+ *  ./fsmdemo -n -s fsmdemo.script
  */
 
 #include <stdlib.h>      /* atoi, malloc, strtol, strtoll, strtoul */
@@ -17,25 +20,33 @@
 #include <pthread.h>     /* posix threads */
 #include <utils.h>
 #include <evtq.h>
-#include <timer.h>
 #include <fsm.h>
-#include <fsm_defs.h>
 #include <workers.h>
+
+#include <fsm_defs.h>
 
 /**
  * arguments - descriptive string for all commandline arguments
  */
 char *arguments = "\n"							\
+	" -t tick: timer tick in msec\n"				\
 	" -s scriptfile: read events from file\n"			\
 	" -n: non-interactive mode (only read from scriptfile)\n"	\
 	" -d level: set debug_flag to hex level\n"			\
 	" -h: this help\n";
 
 /**
+ *
+ * tick - a base timer value multiplied to all timers (see the timer service)
+ *
+ */
+uint32_t tick = 1000;
+
+/**
  * scriptfile - file name for event script to inject events
  * into consumer.
  */
-char scriptfile[64] = "./evtdemo.script";
+char scriptfile[64] = "./fsmdemo.script";
 
 /**
  * non_interactive - If false then commands are accepted
@@ -60,12 +71,15 @@ int cmdline_args(int argc, char *argv[]) {
 	int opt;
 	int argcnt = 0;
 	
-	while((opt = getopt(argc, argv, "s:nd:h")) != -1) {
+	while((opt = getopt(argc, argv, "t:s:nd:h")) != -1) {
 		switch(opt) {
+		case 't':
+			tick = strtoul(optarg, NULL, 0);
+			printf("Setting timer tick to %u\n", tick);
+			break;
 		case 's':
 			strncpy(scriptfile, optarg, sizeof(scriptfile)-1);
 			printf("Setting %s to %s\n", scriptfile, optarg);
-		
 			break;
 		case 'n':
 			non_interactive = true;
@@ -179,10 +193,6 @@ int main(int argc, char *argv[])
 	worker_list_create();
 	worker_list_add(worker_fsm_create(&fsm_task, "stoplight", FSM1));
 	worker_list_add(worker_fsm_create(&fsm_task, "crosswalk", FSM2));
-
-	/* TODO: create timers in FSMs? */
-	create_timer(TID_LIGHT, E_LIGHT);
-	create_timer(TID_BLINK, E_BLINK);
 
 	/* loop until 'x' entered */
 	non_interactive ? evt_script() : evt_producer();

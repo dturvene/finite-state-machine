@@ -3,12 +3,16 @@
  * Copyright (C) 2021 Dahetral Systems
  * Author: David Turvene (dturvene@dahetral.com)
  *
- * 
+ * Definitions for FSM1 (stoplight) and FSM2 (crosswalk) described
+ * in the README.md
+ *
+ *  
  */
 
 #ifndef _FSM_DEFS_H
 #define _FSM_DEFS_H
 
+#include <timer.h>
 #include <fsm.h>
 #include <workers.h>
 
@@ -22,25 +26,35 @@
 		}							\
 	} while(0);
 
-/************************************ timer event ****************************************/
-/* standard time TICK in msec */
-#define TICK 1000UL
+/************************************ timers ****************************************/
+extern uint32_t tick; /* forward definition */
 
+#if 0
 /* BUTTON press expiry */
-#define T_BUT 1*TICK
+#define T_BUT 1
 
 /* YELLOW expiry */
-#define T_FAST 3*TICK
+#define T_FAST 3
 
 /* RED, GREEN expiry */
-#define T_NORM 10*TICK
+#define T_NORM 10
 
 /* time before entering BLINKING state */
-#define T_BLINK T_NORM-2*TICK
+#define T_BLINK (T_NORM-2)
+#endif
 
 /* timer ids used in create_timer, set_timer */
-#define TID_LIGHT 1
-#define TID_BLINK 2
+enum timer_ids {
+	TID_LIGHT,
+	TID_BLINK,
+};
+
+
+extern uint32_t tick;
+uint32_t t_norm = 10;
+uint32_t t_fast = 3;
+uint32_t t_but = 1;
+uint32_t t_blink = (10-2);
 
 /************************************** FSM action functions *****************************/
 void act_enter(void *arg)
@@ -59,31 +73,47 @@ void act_done(void *arg)
 	pthread_exit(NULL);
 }
 
+void stoplight_init_enter(void *arg)
+{
+	ACT_TRACE();
+
+	/* create timers with event on expiry */
+	create_timer(TID_LIGHT, E_LIGHT);
+	create_timer(TID_BLINK, E_BLINK);
+
+	/* update timer expiry periods to be adjustable */
+	/* TODO: make timer periods more descriptive */
+	t_norm *= tick;
+	t_fast *= tick;	
+	t_but *= tick;
+	t_blink *= tick;
+}
+
 void green_enter(void *arg)
 {
 	ACT_TRACE();
 	workers_evt_broadcast(E_GREEN);
-	set_timer(TID_LIGHT, T_NORM);
+	set_timer(TID_LIGHT, t_norm);
 }
 
 void yellow_enter(void *arg)
 {
 	ACT_TRACE();
 	workers_evt_broadcast(E_YELLOW);
-	set_timer(TID_LIGHT, T_FAST);
+	set_timer(TID_LIGHT, t_fast);
 }
 
 void red_enter(void *arg)
 {
 	ACT_TRACE();
 	workers_evt_broadcast(E_RED);
-	set_timer(TID_LIGHT, T_NORM);	
+	set_timer(TID_LIGHT, t_norm);	
 }
 
 void green_but_enter(void *arg)
 {
 	ACT_TRACE();
-	set_timer(TID_LIGHT, T_BUT);
+	set_timer(TID_LIGHT, t_but);
 }
 
 bool but_constraint(void *arg)
@@ -91,7 +121,7 @@ bool but_constraint(void *arg)
 	uint64_t rem;
 
 	rem = get_timer(TID_LIGHT);
-	if (rem > T_BUT)
+	if (rem > t_but)
 		return(true);
 	return(false);
 }
@@ -99,30 +129,29 @@ bool but_constraint(void *arg)
 void walk_enter(void *arg)
 {
 	ACT_TRACE();
-	set_timer(TID_BLINK, T_BLINK);
+	set_timer(TID_BLINK, t_blink);
 }
 
 void walk_exit(void *arg)
 {
 	ACT_TRACE();
-	set_timer(TID_BLINK, 0);
+	set_timer(t_blink, 0);
 }	
-	
 
 /********************************* FSM Definitions *******************************/
 
-/* Common states */
-fsm_state_t s_init = {"S_INIT", act_enter, act_exit};
-fsm_state_t s_done = {"S_DONE", act_done, NULL};
+/* Default states */
+fsm_state_t s_init = {"S:INIT", act_enter, act_exit};
+fsm_state_t s_done = {"S:DONE", act_done, NULL};
 
 /* FSM1, stoplight */
-/* TODO: put timer create in S_INIT actions? */
-fsm_state_t s_stoplight_init = {"S_INIT", act_enter, act_exit};
-fsm_state_t s_red = {"S_RED", red_enter, act_exit};
-fsm_state_t s_green = {"S_GREEN", green_enter, act_exit};
-fsm_state_t s_yellow = {"S_YELLOW", yellow_enter, act_exit};
-fsm_state_t s_green_but = {"S_GREEN_BUT", green_but_enter, act_exit};
+fsm_state_t s_stoplight_init = {"S:INIT", stoplight_init_enter, act_exit};
+fsm_state_t s_red = {"S:RED", red_enter, act_exit};
+fsm_state_t s_green = {"S:GREEN", green_enter, act_exit};
+fsm_state_t s_yellow = {"S:YELLOW", yellow_enter, act_exit};
+fsm_state_t s_green_but = {"S:GREEN_BUT", green_but_enter, act_exit};
 fsm_trans_t FSM1[] = {
+	/* specific init for timers, transition to s_green */
 	{&s_stoplight_init, E_INIT, NULL, &s_green},
 
 	/* GREEN */
@@ -145,10 +174,11 @@ fsm_trans_t FSM1[] = {
 };
 
 /* FSM2, crosswalk */
-fsm_state_t s_nowalk = {"DONT WALK", act_enter, act_exit};
-fsm_state_t s_walk = {"WALK", walk_enter, act_exit};
-fsm_state_t s_blink = {"BLINKING WALK", act_enter, act_exit};
+fsm_state_t s_nowalk = {"S:DONT_WALK", act_enter, act_exit};
+fsm_state_t s_walk = {"S:WALK", walk_enter, act_exit};
+fsm_state_t s_blink = {"S:BLINKING WALK", act_enter, act_exit};
 fsm_trans_t FSM2[] = {
+	/* generic init to s_nowalk */
 	{&s_init, E_INIT, NULL, &s_nowalk},
 
 	/* DONT WALK */

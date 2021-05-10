@@ -33,7 +33,7 @@ cli.o: cli.c evtq.h utils.h workers.h
 fsm.o: fsm.c fsm.h utils.h evtq.h
 	$(CC) $(CFLAGS) -c $<
 
-fsmdemo.o: fsmdemo.c workers.h utils.h
+fsmdemo.o: fsmdemo.c workers.h utils.h fsm_defs.h
 	$(CC) $(CFLAGS) -c $<
 
 fsmdemo: fsmdemo.o evtq.o timer.o fsm.o cli.o

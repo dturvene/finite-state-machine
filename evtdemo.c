@@ -192,9 +192,6 @@ void *evt_c1(void *arg)
 		case E_DONE:
 			pthread_exit(NULL);
 			break;
-		case E_IDLE:
-			nap(100);
-			break;
 		default:
 			break;
 		} /* switch */

@@ -1,3 +1,10 @@
+<!--
+github push:
+sign_and_send_pubkey: signing failed: agent refused operation
+git@github.com: Permission denied (publickey).
+fatal: Could not read from remote repository.
+See ssh.sh:ssh_agent
+-->
 
 Abstract
 ========
