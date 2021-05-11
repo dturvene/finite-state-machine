@@ -32,7 +32,12 @@ char *arguments = "\n"							\
 	" -t tick: timer tick in msec\n"				\
 	" -s scriptfile: read events from file\n"			\
 	" -n: non-interactive mode (only read from scriptfile)\n"	\
-	" -d level: set debug_flag to hex level\n"			\
+	" -d hex: set debug_flag to hex level\n"			\
+	"    0x01: debug FSM transitions\n"				\
+	"    0x02: debug event push/pop\n"				\
+	"    0x04: debug timers\n"					\
+	"    0x10: debug FSM workers\n"					\
+	"    0x20: debug deep for unit debug\n"				\
 	" -h: this help\n";
 
 /**
@@ -147,7 +152,7 @@ void *fsm_task(void *arg)
 	/* worker_self() loops through worker_list for match on pthread_self */
 	while (true)
 	{
-		evtq_pop(self_p->evtq_p, &evt_id);
+		evtq_dequeue(self_p->evtq_p, &evt_id);
 		dbg_evts(evt_id);
 		fsm_run(self_p->fsm_p, evt_id);
 	}

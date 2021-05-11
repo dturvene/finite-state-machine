@@ -10,6 +10,10 @@
 #include <workers.h>
 #include <fsm.h>
 
+/**
+ * dbg_trans -
+ *
+ */
 void dbg_trans(fsm_trans_t *fsm_p, fsm_state_t *nextst_p, fsm_events_t evt_id)
 {
 	struct timespec ts;
@@ -20,10 +24,11 @@ void dbg_trans(fsm_trans_t *fsm_p, fsm_state_t *nextst_p, fsm_events_t evt_id)
 		return;
 			
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	len=snprintf(buf, sizeof(buf), "ts=%ld.%09ld %s to %s for evt=%s\n",
-		     ts.tv_sec, ts.tv_nsec,
-		     fsm_p->currst_p->name, nextst_p?nextst_p->name:"no next",
-		     evt_name[evt_id]);
+	len=snprintf(buf, sizeof(buf), "%s:ts=%ld.%3ld evt=%s trans %s to %s\n",
+		     worker_get_name(),
+		     ts.tv_sec%100, ts.tv_nsec/(int)1e6,
+		     evt_name[evt_id],
+		     fsm_p->currst_p->name, nextst_p?nextst_p->name:"no next");
 	
 	/* if cannot fit entire string into buffer, force a newline and null at end */
 	if (len >= sizeof(buf)) {

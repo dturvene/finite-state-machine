@@ -155,7 +155,7 @@ void set_sig_handlers(void) {
  * @arg: event queue array created by controlling thread
  *
  * This is a simple framework:
- * - pop an event when it is available (evtq_pop blocks until then)
+ * - dequeue an event when it is available (evtq_dequeue blocks until then)
  * - print the event
  * - if it is an E_DONE event end loop and exit
  */
@@ -171,7 +171,7 @@ void *evt_c1(void *arg)
 	evtq_self = self_p->evtq_p;
 	while (true)
 	{
-		evtq_pop(evtq_self, &evt_id);
+		evtq_dequeue(evtq_self, &evt_id);
 		dbg_evts(evt_id);
 		
 		switch(evt_id) {
@@ -205,7 +205,7 @@ void *evt_c1(void *arg)
  * @arg: event queue array created by controlling thread
  *
  * This is a simple framework:
- * - pop an event when it is available (evtq_pop blocks until then)
+ * - dequeue an event when it is available (evtq_dequeue blocks until then)
  * - print the event
  * - if it is an E_DONE event end loop and exit
  */
@@ -221,7 +221,7 @@ void *evt_c2(void *arg)
 	evtq_self = self_p->evtq_p;
 	while (true)
 	{
-		evtq_pop(evtq_self, &evt_id);
+		evtq_dequeue(evtq_self, &evt_id);
 		dbg_evts(evt_id);
 		
 		switch(evt_id) {

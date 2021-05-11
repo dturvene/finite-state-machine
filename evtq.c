@@ -45,7 +45,7 @@ void evtq_destroy(evtq_t* q_p)
 }
 
 /**
- * evtq_push - add an event to the tail of the queue
+ * evtq_enqueue - add an event to the tail of the queue
  * @evtq_p - pointer to event queue
  * @id - the event id to add
  * 
@@ -54,7 +54,7 @@ void evtq_destroy(evtq_t* q_p)
  * signal condition that there is an new event queued
  * unlock queue
  */
-void evtq_push(evtq_t *evtq_p, fsm_events_t evt_id)
+void evtq_enqueue(evtq_t *evtq_p, fsm_events_t evt_id)
 {
 	struct fsm_event *ep;
 	char msg[80];
@@ -74,7 +74,7 @@ void evtq_push(evtq_t *evtq_p, fsm_events_t evt_id)
 }
 
 /**
- * evtq_pop - pop an event from head of queue
+ * evtq_dequeue - pop an event from head of queue
  * @evtq_p - pointer to event queue
  * @id_p - update this pointer
  *
@@ -87,7 +87,7 @@ void evtq_push(evtq_t *evtq_p, fsm_events_t evt_id)
  * free event memory
  * unlock queue
  */ 
-void evtq_pop(evtq_t *evtq_p, fsm_events_t* id_p)
+void evtq_dequeue(evtq_t *evtq_p, fsm_events_t* id_p)
 {
 	struct fsm_event *ep;
 
@@ -121,7 +121,7 @@ void evtq_pop(evtq_t *evtq_p, fsm_events_t* id_p)
  *   queue len - number of events in queue
  *
  * This is used to check if there are items in queue. 
- * Typically the queue pthread_cond will be set when there are events and evtq_pop
+ * Typically the queue pthread_cond will be set when there are events and evtq_dequeue
  * will wait on it.  This is used when the thread cannot block on the cond_wait.
  */
 uint32_t evtq_len(evtq_t *evtq_p)

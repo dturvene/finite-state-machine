@@ -112,7 +112,7 @@ inline static void workers_evt_broadcast(fsm_events_t evt_id)
 {
 	worker_t *w_p;
 	nl_list_for_each_entry(w_p, &workers.head.list, list) {
-		evtq_push(w_p->evtq_p, evt_id);
+		evtq_enqueue(w_p->evtq_p, evt_id);
 	}
 }
 

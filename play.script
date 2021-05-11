@@ -1,0 +1,31 @@
+# unit test script
+# ./fsmdemo -n -s play.script -t 100
+# Test the button event
+
+# send workers go event to run and nap
+# light timer=t_norm(10*tick), state=S:GREEN
+g n1 s
+
+# button press, nap1, status
+# light timer=t_but(1*tick), state=S:GREEN_BUT
+b n1 s
+
+# wait for going out of GREEN_BUT
+# light timer=t_fast(3*tick), state=S:YELLOW
+n3 s
+
+# nap3, status
+# light timer=t_norm(10*tick), state=S:RED,S:WALK
+n3 s
+
+# button, nap1, status
+# light timer=t_norm(10*tick), state=S:RED,S:WALK
+b n1 s
+
+# nap5, nap5, status
+# light timer=t_norm(10*tick), state=S:GREEN,S:DONT_WALK
+n5 n5 s
+
+# exit all threads and join
+x
+# script eof

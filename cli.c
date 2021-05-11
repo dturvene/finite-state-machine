@@ -90,8 +90,9 @@ int evt_parse_buf(const char const *buf)
 				printf("\ttN: toggle timer N\n");
 				printf("\tr: run event input script %s\n", scriptfile);
 				printf("\ts: show current FSM state\n");
-				printf("\tn: main thread nap 5 ticks\n"
+				printf("\tnN: main thread nap N ticks\n"
 				      "(worker/timer threads keep running)\n");
+				printf("\tp: pause CLI thread\n");
 				printf("\tdefault: unknown command\n");
 				break;
 			case 'x':
@@ -122,8 +123,10 @@ int evt_parse_buf(const char const *buf)
 				workers_evt_broadcast(E_BUTTON);
 				break;
 			case 's':
+				printf("*** FSM status\n");
 				show_timers();
 				show_workers();
+				printf("*** END FSM status\n");
 				break;
 			case 't':
 			{
@@ -144,6 +147,9 @@ int evt_parse_buf(const char const *buf)
 				dbg_verbose("after nap");
 			}
 			break;
+			case 'p':
+				relax();
+				break;
 			default:
 				printf("%c: unknown cmd\n", *sp);
 				break;

@@ -81,6 +81,13 @@ typedef struct {
 	pthread_cond_t cond;
 } evtq_t;
 
+/**
+ * _dbg_evts - create a debug string for event 
+ * @func - the current function
+ * @evt_id - the event id to show
+ *
+ * print info about current event
+ */
 static inline void _dbg_evts(const char *func, fsm_events_t evt_id)
 {
 	char buf[120];
@@ -93,8 +100,8 @@ static inline void _dbg_evts(const char *func, fsm_events_t evt_id)
 extern evtq_t* evtq_create(void);
 extern void evtq_destroy(evtq_t* q_p);
 extern void evtq_destroy_all(evtq_t** q_pp);
-extern void evtq_push(evtq_t *evtq_p, fsm_events_t id);
-extern void evtq_pop(evtq_t *evtq_p, fsm_events_t* id_p);
+extern void evtq_enqueue(evtq_t *evtq_p, fsm_events_t id);
+extern void evtq_dequeue(evtq_t *evtq_p, fsm_events_t* id_p);
 extern uint32_t evtq_len(evtq_t *evtq_p);
 extern int evt_parse_buf(const char const *buf);
 extern void evt_script(void);

@@ -31,22 +31,7 @@ There are two substantial efforts under this project.
    
 2. The second uses the event delivery framework to build the 
    [FSM Example](#fsm-example): [fsmdemo](#fsmdemo).
-   
-TODO
-----
-* describe each FSM as a pthread worker
-* an event is delivered to all FSM workers.  This has the advantage of a single
-  event-delivery function and all the logic of event handling is retained in
-  the FSM definitions.
-* UML State machine is good has a number of extensions for special case logic
-  that causes it to become complex and difficult to implement.  The focus of
-  this paper is a simple FSM.  If necessary, the complex logic is added to the
-  enter and exit actions.
-* FSM requirements: simple to understand, deterministic, minimal number of
-  events generated/consumed.
-* [UML](https://www.omg.org/spec/UML/2.2/Superstructure/PDF) too complex but
-  the notation is useful to concisely document each FSM.
-  
+     
 FSM Overview
 ============
 A DFSM is essentially a set of states, each accepting a subset of all FSM
@@ -55,22 +40,57 @@ accepted by the current state will either be discarded or cause an error.  It
 is possible that an error will cause the FSM to generate an error event to
 another FSM alerting it to a possible FSM bug.
 
-. 
-It is a good reference but, for the purpose of this project, too complex.  It
-has a number of FSM extensions that strength the model but, in my opinion, 
-confuse the theory.  For example, there is a **state** and a more powerful
-**extended state**. The **extended state** can have a guard condition (which is
-usually a static boolean or counter) that will allow/prohibit the transition to
-the state. The effect of the guard condition is that an event WILL cause a
-state transition or it WILL NOT. This breaks the definition of a DFSM.
+The FSM model is based on [OMG UML 2.5.1][] specification.  This is a
+comprehesive (800 page!) description of all aspects of the UML but I will focus
+Chapter 14 (State Machines) and even then not implement much described
+behavior.
+
+The basic requirements for the FSMs implemented in this project are:
+* simple to understand,
+* deterministic,
+* minimal number of events generated/consumed.
+
+I decided to send all events to all FSMs to simplify the event delivery
+framework. Thus a FSM that generates an event will also receive it. If it is
+in state to accept the event then the transition logic will be run, otherwise
+the event will be discarded.  At the `DBG_DEEP` verbosity (`-d 0x20`) a 
+`NO match` debug message will be geneate by the fsm logic.
+
+Each Transition (UML 14.2.3.8) is a struct of:
+* current state
+* event (`E_`)
+* transition guard constaint function
+* next state
+
+As described in [OMG UML v2.5.1][] paragraph 14.2.3.8.3, a transition
+may have a guard condition. This boolean condition will allow the transition if
+`true` and deny it if `false`.  In otherwords, if the guard condition returns
+`false` the transition to the next state will not be completed and the event
+will be discarded.
+
+Each State (UML 14.2.3.4) is a struct of:
+* char name
+* entry_action function (UML 14.2.3.4.5)
+* exit_action function (UML 14.2.3.4.6)
+
+Finally, an FSM definition is simply a static array of Transition
+instances. 
+
+The code in `fsm.[ch]` is the generic code for an FSM, including a
+call to `fsm_run` to drive the FSM given an input event.
+
+The code in `fsm_defs.h` contains the definition for the stoplight and
+crosswalk FSMs along with the (simple) `entry_action`, `exit_action` and
+`constraint` functions.  It also contains the specifics for the timers used by 
+these two FSMs. 
 
 Glossary and Definitions
 ========================
 * [C language](https://en.wikipedia.org/wiki/C_(programming_language))
+* [CLI](https://en.wikipedia.org/wiki/Command-line_interface): Command Line Interface
 * [DFSM](https://en.wikipedia.org/wiki/Deterministic_finite_automaton): 
   Deterministic Finite State Machine
 * `$K`: the root of the Linux kernel source tree
-
 
 FSM Example
 ===========
@@ -88,27 +108,14 @@ concepts.  In this example, there are four threads:
 4. `TSRV` is the timer service.
 
 The `MGMT` thread has no states but can generate on-demand events from a user
-interface or script file.
+interface or script file 
+([Unit and Regression Testing](#unit-and-regression-testing)).
 
 `TSRV` is a service used by the other threads to create/manage timers and timer
 events.  A worker creates and sets a timer with the TSRV thread using the
 `fsmtimer` API.  The `fsmtimer` API has an internal mutex to protect against
 race conditions.  When a timer expires, the `TSRV` delivers the corresponding
 event to all worker threads.
-
-Each FSM worker thread is built around a unique FSM state table, described
-below using the State Machines Notation from 
-[OMG UML v2.5.1](https://www.omg.org/spec/UML/2.5.1/).
-
-The FSM mechanisms use a small subset of features in the State Machines chapter
-of [OMG UML v2.5.1](https://www.omg.org/spec/UML/2.5.1/). However, all the
-features of each FSM are defined in the UML doc.
-
-As described in [OMG UML v2.5.1]() paragraph 14.2.4.8, a transition (event) may
-have a guard condition. This boolean condition will allow the transition if
-`true` and deny it if `false`.  In otherwords, if the guard condition returns
-`false` the transition to the next state will not be completed and the event
-will be discarded.
 
 FSM1 (stoplight) state diagram
 ------------------------------
@@ -138,7 +145,12 @@ FSM. The structures are organized from most elemental to
 * Transition: A structure defining a current state, next state and the event
   that causes the transition. See `fsm.h` for documentation.
 
-* FSM: A simple array of transition instances. See `fsm_defs.h` for documentation.
+* FSM: A simple array of transition instances. See `fsm_defs.h` for
+  documentation.
+  
+The FSM mechanisms use a small subset of features in the State Machines chapter
+of [OMG UML v2.5.1](https://www.omg.org/spec/UML/2.5.1/). However, all the
+features of each FSM are defined in the UML doc.
 
 Software APIs
 -------------
@@ -153,22 +165,89 @@ The APIs used in this project include the following.
 
 * The linked list use the `libnl3/netlink/list.h` macros, which are a
   replica of the macros in
-  [kernel list management](https://www.kernel.org/doc/html/v5.11/core-api/kernel-api.html#list-management-functions)
+  [kernel list management][]
   and implemented in `$K/include/linux/list.h`.
 * `pthread_`, `pthread_cond_` calls as defined in
-  [POSIX threads](https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xsh_chap02.html#tag_22_02_09)
+  [POSIX threads][]
   are roughly comparable to the kernel `kthread_` and `wait_event_` APIs
   described in 
   [Kernel Basics](https://www.kernel.org/doc/html/v5.1/driver-api/basics.html)
 * `pthread_mutex_` calls are comparable to the mutex APIs documented in
   [locking](https://www.kernel.org/doc/html/v5.1/kernel-hacking/locking.html)
   
+Unit and Regression Testing
+---------------------------
+The FSMs are entirely event driven, with event generation from timer expiry or
+the CLI.  The CLI accepts a simple set of string commands from the user for
+interaction with the FSMs.  The commands are one of:
+
+1. FSM event generation
+2. timer control
+3. FSM status
+4. Pause the CLI thread while the FSMs run
+
+This is an effective mechanism to unit test the FSMs.
+
+The FSMs can be regression tested by combining CLI commands into a script.  As
+the FSMs cycle through state transitions, the script either pauses or retrieves
+FSM status.  The script is passed as an argument to [fsmdemo][] and visually
+checked.  Ideally I would wrap the FSM scripts in a python test script to
+verify that the FSMs are in the correct state and the timers are set to the
+correct expiry values.
+
+Here is the `button.script` to test the button press support:
+
+```
+# test script to test button press
+# ./fsmdemo -n -s button.script -t 100
+# Test the button event
+
+# send workers go event to run and nap
+# light timer=t_norm(10*tick), state=S:GREEN
+g n1 s
+
+# button press, nap1, status
+# light timer=t_but(1*tick), state=S:GREEN_BUT
+b n1 s
+
+# wait for going out of GREEN_BUT
+# light timer=t_fast(3*tick), state=S:YELLOW
+n3 s
+
+# nap3, status
+# light timer=t_norm(10*tick), state=S:RED,S:WALK
+n3 s
+
+# button, nap1, status
+# light timer=t_norm(10*tick), state=S:RED,S:WALK
+b n1 s
+
+# nap5, nap5, status
+# light timer=t_norm(10*tick), state=S:GREEN,S:DONT_WALK
+n5 n5 s
+
+# exit all threads and join
+x
+# script eof
+```
+
 Alternative API Implementations
 -------------------------------
 These are some of the kernel mechanisms I investigated as alternatives to the
 classic `mutex/cond_wait` and linked list APIs from above.  The [FIFO](#fifo) and
 [reader-writer lock](#reader-writer-lock) are worthy of more investigation to
 replace the current `mutex/cond_wait` implementation.
+
+Events
+------
+I looked at the [libevent](http://libevent.org/) library for event handling,
+which uses a registration/callback API.
+
+Currently the event delivery code uses a simple queue based on a user-space
+implementation of [kernel list management][] and `pthread_cond_` calls from
+[POSIX threads][].  This is similar to some kernel event delivery mechanisms,
+search on `enqueue` and `dequeue` for examples.  This mechanism is simple and
+meets all requirements so I don't see changing it.
 
 FIFO
 ----
@@ -257,3 +336,9 @@ fsmdemo
 This program implements the [FSM Example](#fsm-example) using the `evtdemo.c`
 framework.
 
+<!--
+References
+-->
+[kernel list management]: https://www.kernel.org/doc/html/v5.11/core-api/kernel-api.html#list-management-functions
+[POSIX threads]: https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xsh_chap02.html#tag_22_02_09
+[OMG UML v2.5.1]: https://www.omg.org/spec/UML/2.5.1/
