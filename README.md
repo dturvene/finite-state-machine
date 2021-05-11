@@ -19,7 +19,8 @@ developing this code is as follows:
 * Many of the FSM implementations are very difficult to comprehend.  As a
   simple example of this: study `$K/include/net/tcp_states.h` and calls to
   `tcp_set_state` (`$K/net/ipv4/tcp.c`). Try to match the FSM defined in 
-  [RFC-793:TCP](https://tools.ietf.org/html/rfc793) with the code.
+  [RFC-793:TCP](https://tools.ietf.org/html/rfc793) with the code.  It is
+  possible but difficult.
 * TCP has a fairly simple FSM. Some Telecom chipsets have much
   more complex FSMs or multiple FSMs cooperating to fulfill a mission. These
   FSMs can be fragile and hard to debug.
@@ -33,21 +34,24 @@ There are two substantial efforts under this project.
    a stoplight and a corresponding crosswalk based on timer
    events. Additionally there is an ondemand button to trigger a red light and
    "walk" crosswalk: [fsmdemo](#fsmdemo).
+   
+I made a good number of architecture decisions in developing the code 
+[Alternative API Implementations](#alternative-api-implementations).  Some are
+fruit for future research.
      
 FSM Overview
 ============
 A DFSM is essentially a set of states, each accepting a subset of all FSM
 events.  Each event causes a reaction particular to that state.  An event not
-accepted by the current state will either be discarded or cause an error.  It
-is possible that an error will cause the FSM to generate an error event to
-another FSM alerting it to a possible FSM bug.
+accepted by the current state will either be discarded or cause an error.
 
-The FSM model is based on [OMG UML 2.5.1][] specification.  This is a
+The FSM model is based on [OMG UML v2.5.1][] specification.  This is a
 comprehesive (800 page!) description of all aspects of the UML but I will focus
-Chapter 14 (State Machines) and even then not implement much described
+Chapter 14 **State Machines** and even then not implement much described
 behavior.
 
 The basic requirements for the FSMs implemented in this project are:
+
 * simple to understand,
 * deterministic,
 * minimal number of events generated/consumed.
@@ -105,8 +109,8 @@ these two FSMs.
 
 Software APIs
 -------------
-Per the [Abstract](#abstract), I am focussing on the Linux kernel and device
-drivers.  The code is developed in C and, where possible, mimics the 
+As mentioned earlier, for this project I am focussing on the Linux kernel and
+device drivers.  The code is developed in C and, where possible, mimics the 
 [Linux kernel API](https://www.kernel.org/doc/html/v5.11/core-api/kernel-api.html)
 Where a suitable kernel API was not possible, the software uses
 [POSIX](https://pubs.opengroup.org/onlinepubs/9699919799/)
@@ -207,7 +211,8 @@ Project Documentation
 =====================
 This **README** is the primary project documentation.
 
-The project is version-controlled at https://github.com/dturvene/finite-state-machine
+The project is version-controlled on github at
+[github:dturvene FSM](https://github.com/dturvene/finite-state-machine)
 
 The source code is heavily documented using the 
 [Kernel Doc](https://www.kernel.org/doc/html/v5.1/doc-guide/kernel-doc.html)
@@ -266,21 +271,28 @@ The FSMs are entirely event driven, with event generation from timer expiry or
 the CLI.  The CLI accepts a simple set of string commands from the user for
 interaction with the FSMs.  The commands are one of:
 
-1. FSM event generation
-2. timer control
-3. FSM status
-4. Pause the CLI thread while the FSMs run
+* FSM event generation
+* timer control
+* FSM status
+* Pause the CLI thread while the FSMs run
 
 This is an effective mechanism to unit test the FSMs.
 
-The FSMs can be regression tested by combining CLI commands into a script.  As
-the FSMs cycle through state transitions, the script either pauses or retrieves
-FSM status.  The script is passed as an argument to [fsmdemo][] and visually
-checked.  Ideally I would wrap the FSM scripts in a python test script to
-verify that the FSMs are in the correct state and the timers are set to the
-correct expiry values.
+The FSMs can be regression tested by combining CLI commands into a script.
+This is very helpful after source mods to quickly and accureately confirm that
+the desired behavior is still valid.
 
-Here is the `button.script` to test the button press support:
+The script works the same as the CLI but automatically. As the FSMs cycle
+through state transitions, the script either pauses or retrieves
+FSM status.  The script is passed as an argument to [fsmdemo](#fsmdemo) and
+visually checked.  The scripts are commented to make the test steps
+clearer.
+
+Ideally I would wrap the FSM scripts in a python test script to verify that the
+FSMs are in the correct state and the timers are set to the correct expiry
+values.
+
+Here is the `button.script` to regression test the button press support:
 
 ```
 # test script to test button press
@@ -317,8 +329,8 @@ x
 ```
 
 <!--
-References
+References, cannot have trailing slash
 -->
 [kernel list management]: https://www.kernel.org/doc/html/v5.11/core-api/kernel-api.html#list-management-functions
 [POSIX threads]: https://pubs.opengroup.org/onlinepubs/9699919799/xrat/V4_xsh_chap02.html#tag_22_02_09
-[OMG UML v2.5.1]: https://www.omg.org/spec/UML/2.5.1/
+[OMG UML v2.5.1]: https://www.omg.org/spec/UML/2.5.1
