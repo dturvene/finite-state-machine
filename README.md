@@ -29,8 +29,10 @@ There are two substantial efforts under this project.
 1. The first is to develop a simple, reliable event delivery framework to/from
    a set of POSIX "worker" threads: [evtdemo](#evtdemo).
    
-2. The second uses the event delivery framework to build the 
-   [FSM Example](#fsm-example): [fsmdemo](#fsmdemo).
+2. The second uses the event delivery framework to drive two cooperating FSMs:
+   a stoplight and a corresponding crosswalk based on timer
+   events. Additionally there is an ondemand button to trigger a red light and
+   "walk" crosswalk: [fsmdemo](#fsmdemo).
      
 FSM Overview
 ============
@@ -57,6 +59,7 @@ the event will be discarded.  At the `DBG_DEEP` verbosity (`-d 0x20`) a
 `NO match` debug message will be geneate by the fsm logic.
 
 Each Transition (UML 14.2.3.8) is a struct of:
+
 * current state
 * event (`E_`)
 * transition guard constaint function
@@ -69,20 +72,15 @@ may have a guard condition. This boolean condition will allow the transition if
 will be discarded.
 
 Each State (UML 14.2.3.4) is a struct of:
+
 * char name
 * entry_action function (UML 14.2.3.4.5)
 * exit_action function (UML 14.2.3.4.6)
 
-Finally, an FSM definition is simply a static array of Transition
-instances. 
+Finally, FSM is defined as a set of Transitions from one state to the
+next when an Event is injected into the FSM driver function.
 
-The code in `fsm.[ch]` is the generic code for an FSM, including a
-call to `fsm_run` to drive the FSM given an input event.
-
-The code in `fsm_defs.h` contains the definition for the stoplight and
-crosswalk FSMs along with the (simple) `entry_action`, `exit_action` and
-`constraint` functions.  It also contains the specifics for the timers used by 
-these two FSMs. 
+The FSMs in this project are a proper subset of UML 14.
 
 Glossary and Definitions
 ========================
@@ -92,65 +90,18 @@ Glossary and Definitions
   Deterministic Finite State Machine
 * `$K`: the root of the Linux kernel source tree
 
-FSM Example
-===========
-The project uses a set of simple, interworking FSMs to illustrate the
-concepts.  In this example, there are four threads:
-
-1. `MGMT` is the main process of the event framework to start/stop the FSMs and
-   send events to them. It has no states.  It can generate the following events
-   either from the keyboard or a script file.
-   
-2. `FSM1` is the thread for the traffic stoplight.
-
-3. `FSM2` is the thread for the crosswalk.
-
-4. `TSRV` is the timer service.
-
-The `MGMT` thread has no states but can generate on-demand events from a user
-interface or script file 
-([Unit and Regression Testing](#unit-and-regression-testing)).
-
-`TSRV` is a service used by the other threads to create/manage timers and timer
-events.  A worker creates and sets a timer with the TSRV thread using the
-`fsmtimer` API.  The `fsmtimer` API has an internal mutex to protect against
-race conditions.  When a timer expires, the `TSRV` delivers the corresponding
-event to all worker threads.
-
-FSM1 (stoplight) state diagram
-------------------------------
-![FSM1](fsm_stoplight.png)
-
-FSM2 (crosswalk) state diagram
-------------------------------
-![FSM2](fsm_crosswalk.png)
-
 Software Overview
 =================
+The [FSM Overview](#fsm-overview) chapter gives a high-level view of the code
+structure. Here are some specifics:
 
-FSM Definition
---------------
-An FSM is defined as a set of Transitions from one state to the next when an
-Event is injected into the FSM driver function.
+The code in `fsm.[ch]` is the generic code for an FSM, including a
+call to `fsm_run` to drive the FSM given an input event.
 
-The following data structures are used to programmatically define an
-FSM. The structures are organized from most elemental to 
-  
-* Event : A simple enum of event symbols, each using an `E_` prefix.
-  See `evt_q.h` for documentation.
-
-* State: A structure defining a specific state, with entry and exit actions.
-  See `fsm.h` for documentation.
-
-* Transition: A structure defining a current state, next state and the event
-  that causes the transition. See `fsm.h` for documentation.
-
-* FSM: A simple array of transition instances. See `fsm_defs.h` for
-  documentation.
-  
-The FSM mechanisms use a small subset of features in the State Machines chapter
-of [OMG UML v2.5.1](https://www.omg.org/spec/UML/2.5.1/). However, all the
-features of each FSM are defined in the UML doc.
+The code in `fsm_defs.h` contains the definition for the stoplight and
+crosswalk FSMs along with the (simple) `entry_action`, `exit_action` and
+`constraint` functions.  It also contains the specifics for the timers used by
+these two FSMs.
 
 Software APIs
 -------------
@@ -167,70 +118,13 @@ The APIs used in this project include the following.
   replica of the macros in
   [kernel list management][]
   and implemented in `$K/include/linux/list.h`.
-* `pthread_`, `pthread_cond_` calls as defined in
-  [POSIX threads][]
+* `pthread_` and `pthread_cond_` calls as defined in [POSIX threads][]
   are roughly comparable to the kernel `kthread_` and `wait_event_` APIs
   described in 
   [Kernel Basics](https://www.kernel.org/doc/html/v5.1/driver-api/basics.html)
 * `pthread_mutex_` calls are comparable to the mutex APIs documented in
   [locking](https://www.kernel.org/doc/html/v5.1/kernel-hacking/locking.html)
   
-Unit and Regression Testing
----------------------------
-The FSMs are entirely event driven, with event generation from timer expiry or
-the CLI.  The CLI accepts a simple set of string commands from the user for
-interaction with the FSMs.  The commands are one of:
-
-1. FSM event generation
-2. timer control
-3. FSM status
-4. Pause the CLI thread while the FSMs run
-
-This is an effective mechanism to unit test the FSMs.
-
-The FSMs can be regression tested by combining CLI commands into a script.  As
-the FSMs cycle through state transitions, the script either pauses or retrieves
-FSM status.  The script is passed as an argument to [fsmdemo][] and visually
-checked.  Ideally I would wrap the FSM scripts in a python test script to
-verify that the FSMs are in the correct state and the timers are set to the
-correct expiry values.
-
-Here is the `button.script` to test the button press support:
-
-```
-# test script to test button press
-# ./fsmdemo -n -s button.script -t 100
-# Test the button event
-
-# send workers go event to run and nap
-# light timer=t_norm(10*tick), state=S:GREEN
-g n1 s
-
-# button press, nap1, status
-# light timer=t_but(1*tick), state=S:GREEN_BUT
-b n1 s
-
-# wait for going out of GREEN_BUT
-# light timer=t_fast(3*tick), state=S:YELLOW
-n3 s
-
-# nap3, status
-# light timer=t_norm(10*tick), state=S:RED,S:WALK
-n3 s
-
-# button, nap1, status
-# light timer=t_norm(10*tick), state=S:RED,S:WALK
-b n1 s
-
-# nap5, nap5, status
-# light timer=t_norm(10*tick), state=S:GREEN,S:DONT_WALK
-n5 n5 s
-
-# exit all threads and join
-x
-# script eof
-```
-
 Alternative API Implementations
 -------------------------------
 These are some of the kernel mechanisms I investigated as alternatives to the
@@ -313,6 +207,8 @@ Project Documentation
 =====================
 This **README** is the primary project documentation.
 
+The project is version-controlled at https://github.com/dturvene/finite-state-machine
+
 The source code is heavily documented using the 
 [Kernel Doc](https://www.kernel.org/doc/html/v5.1/doc-guide/kernel-doc.html)
 syntax.
@@ -333,8 +229,92 @@ See the inline documentation for more information.
 
 fsmdemo
 =======
-This program implements the [FSM Example](#fsm-example) using the `evtdemo.c`
-framework.
+This program implements two interworking FSMs using the event delivery
+framework. There are four threads:
+
+1. `MGMT` is the main process of the event framework to start/stop the FSMs and
+   send events to them. It has no states.  It can generate the following events
+   either from the keyboard or a script file.
+   
+2. `FSM1` is the thread for the traffic stoplight.
+
+3. `FSM2` is the thread for the crosswalk.
+
+4. `TSRV` is the timer service.
+
+The `MGMT` thread has no states but can generate on-demand events from a user
+interface or script file 
+([Unit and Regression Testing](#unit-and-regression-testing)).
+
+`TSRV` is a service used by the other threads to create/manage timers and timer
+events.  A worker creates and sets a timer with the TSRV thread using the
+`fsmtimer` API.  The `fsmtimer` API has an internal mutex to protect against
+race conditions.  When a timer expires, the `TSRV` delivers the corresponding
+event to all worker threads.
+
+FSM1 (stoplight) state diagram
+------------------------------
+![FSM1](fsm_stoplight.png)
+
+FSM2 (crosswalk) state diagram
+------------------------------
+![FSM2](fsm_crosswalk.png)
+
+FSM Unit and Regression Testing
+===============================
+The FSMs are entirely event driven, with event generation from timer expiry or
+the CLI.  The CLI accepts a simple set of string commands from the user for
+interaction with the FSMs.  The commands are one of:
+
+1. FSM event generation
+2. timer control
+3. FSM status
+4. Pause the CLI thread while the FSMs run
+
+This is an effective mechanism to unit test the FSMs.
+
+The FSMs can be regression tested by combining CLI commands into a script.  As
+the FSMs cycle through state transitions, the script either pauses or retrieves
+FSM status.  The script is passed as an argument to [fsmdemo][] and visually
+checked.  Ideally I would wrap the FSM scripts in a python test script to
+verify that the FSMs are in the correct state and the timers are set to the
+correct expiry values.
+
+Here is the `button.script` to test the button press support:
+
+```
+# test script to test button press
+# ./fsmdemo -n -s button.script -t 100
+# Test the button event
+
+# send workers go event to run and nap
+# light timer=t_norm(10*tick), state=S:GREEN
+g n1 s
+
+# button press, nap1, status
+# light timer=t_but(1*tick), state=S:GREEN_BUT
+b n1 s
+
+# wait for going out of GREEN_BUT
+# light timer=t_fast(3*tick), state=S:YELLOW
+n3 s
+
+# nap3, status
+# light timer=t_norm(10*tick), state=S:RED,S:WALK
+n3 s
+
+# button, nap1, status
+# light timer=t_norm(10*tick), state=S:RED,S:WALK
+b n1 s
+
+# nap5, nap5, status
+# light timer=t_norm(10*tick), state=S:GREEN,S:DONT_WALK
+n5 n5 s
+
+# exit all threads and join
+x
+# script eof
+```
 
 <!--
 References
