@@ -27,53 +27,75 @@ developing this code is as follows:
   
 There are two substantial efforts under this project.
 
-1. The first is to develop a simple, reliable event delivery framework to/from
+1. Develop a simple, reliable event delivery framework to/from
    a set of POSIX "worker" threads: [evtdemo](#evtdemo).
    
-2. The second uses the event delivery framework to drive two cooperating FSMs:
+2. Use the event delivery framework to drive two cooperating FSMs:
    a stoplight and a corresponding crosswalk based on timer
    events. Additionally there is an ondemand button to trigger a red light and
    "walk" crosswalk: [fsmdemo](#fsmdemo).
    
-I made a good number of architecture decisions in developing the code 
-[Alternative API Implementations](#alternative-api-implementations).  Some are
-fruit for future research.
-     
+I made a good number of architecture decisions in developing the code after
+[Alternative API Research](#alternative-api-research). Some are fruit for
+future research.
+
+Project Documentation
+---------------------
+This **README** is the primary project documentation.
+
+The project is version-controlled on github at
+[github:dturvene FSM](https://github.com/dturvene/finite-state-machine)
+
+The source code is heavily documented using the 
+[Kernel Doc](https://www.kernel.org/doc/html/v5.1/doc-guide/kernel-doc.html)
+syntax.
+   
 FSM Overview
 ============
-A DFSM is essentially a set of states, each accepting a subset of all FSM
-events.  Each event causes a reaction particular to that state.  An event not
-accepted by the current state will either be discarded or cause an error.
+An FSM is essentially a set of states, each accepting a subset of all FSM
+events.  For each state, an event causes a reaction that may transition to a
+new state. An event not accepted by the current state will either be discarded
+or cause an error.
 
-The FSM model is based on [OMG UML v2.5.1][] specification.  This is a
-comprehesive (800 page!) description of all aspects of the UML but I will focus
-Chapter 14 **State Machines** and even then not implement much described
-behavior.
+This FSM model is based on [OMG UML v2.5.1][] specification, a comprehesive
+(800 page!) description of all aspects of the Unified Modeling Language.  From
+UML Chapter 1:
+
+```
+The objective of UML is to provide system architects, software engineers, and
+software developers with tools for analysis, design, and implementation of 
+software-based systems as well as for modeling business and similar processes.
+```
+
+I will focus Chapter 14 **State Machines** and even then not implement much of
+the described behavior.  Additionally Chapter 16 **Actions** and Section 13.3
+**Events** are implicitly used in this document.
 
 The basic requirements for the FSMs implemented in this project are:
 
-* simple to understand,
+* simple to understand and interpret events/transitions,
 * deterministic,
 * minimal number of events generated/consumed.
 
-I decided to send all events to all FSMs to simplify the event delivery
-framework. Thus a FSM that generates an event will also receive it. If it is
-in state to accept the event then the transition logic will be run, otherwise
-the event will be discarded.  At the `DBG_DEEP` verbosity (`-d 0x20`) a 
-`NO match` debug message will be geneate by the fsm logic.
+Another design decision I made is to send all events to all FSMs to simplify
+the event delivery framework. Thus a FSM that generates an event will also
+receive it. If it is in state to accept the event then the transition logic
+will be run, otherwise the event will be discarded.  At the `DBG_DEEP`
+verbosity (`-d 0x20`) a   `NO match` debug message will be geneate by the fsm
+logic.
 
 Each Transition (UML 14.2.3.8) is a struct of:
 
 * current state
-* event (`E_`)
+* event
 * transition guard constaint function
 * next state
 
-As described in [OMG UML v2.5.1][] paragraph 14.2.3.8.3, a transition
-may have a guard condition. This boolean condition will allow the transition if
-`true` and deny it if `false`.  In otherwords, if the guard condition returns
-`false` the transition to the next state will not be completed and the event
-will be discarded.
+As described in UML 14.2.3.8.3, a transition may have a guard condition. This
+boolean condition will allow the transition if the function returns `true` and
+deny it if `false`. If the guard condition returns `false` the
+transition to the next state will not be completed and the event will be
+discarded.
 
 Each State (UML 14.2.3.4) is a struct of:
 
@@ -81,10 +103,13 @@ Each State (UML 14.2.3.4) is a struct of:
 * entry_action function (UML 14.2.3.4.5)
 * exit_action function (UML 14.2.3.4.6)
 
-Finally, FSM is defined as a set of Transitions from one state to the
+Finally, the FSM is defined as a set of Transitions from one State to the
 next when an Event is injected into the FSM driver function.
 
-The FSMs in this project are a proper subset of UML 14.
+Finally, the FSMs in this project are a proper subset of UML 14.  For example, 
+there is a lot more complexity to the UML `State` class including history,
+substates and enhanced actions.  However, these extensions create a more
+difficult software implementation of the FSMsx.
 
 Glossary and Definitions
 ========================
@@ -104,37 +129,86 @@ call to `fsm_run` to drive the FSM given an input event.
 
 The code in `fsm_defs.h` contains the definition for the stoplight and
 crosswalk FSMs along with the (simple) `entry_action`, `exit_action` and
-`constraint` functions.  It also contains the specifics for the timers used by
-these two FSMs.
+`constraint` functions.  It also contains the definitions for the timers used
+by these two FSMs.
 
 Software APIs
 -------------
 As mentioned earlier, for this project I am focussing on the Linux kernel and
 device drivers.  The code is developed in C and, where possible, mimics the 
-[Linux kernel API](https://www.kernel.org/doc/html/v5.11/core-api/kernel-api.html)
+[Linux kernel API](https://www.kernel.org/doc/html/v5.11/core-api/kernel-api.html).
 Where a suitable kernel API was not possible, the software uses
-[POSIX](https://pubs.opengroup.org/onlinepubs/9699919799/)
-APIs.
+[POSIX](https://pubs.opengroup.org/onlinepubs/9699919799/) APIs.
 
 The APIs used in this project include the following.
 
-* The linked list use the `libnl3/netlink/list.h` macros, which are a
-  replica of the macros in
-  [kernel list management][]
+* The linked list uses the `libnl3/netlink/list.h` macros, which are a
+  replica of the macros in [kernel list management][]
   and implemented in `$K/include/linux/list.h`.
 * `pthread_` and `pthread_cond_` calls as defined in [POSIX threads][]
   are roughly comparable to the kernel `kthread_` and `wait_event_` APIs
   described in 
   [Kernel Basics](https://www.kernel.org/doc/html/v5.1/driver-api/basics.html)
 * `pthread_mutex_` calls are comparable to the mutex APIs documented in
-  [locking](https://www.kernel.org/doc/html/v5.1/kernel-hacking/locking.html)
-  
-Alternative API Implementations
--------------------------------
-These are some of the kernel mechanisms I investigated as alternatives to the
-classic `mutex/cond_wait` and linked list APIs from above.  The [FIFO](#fifo) and
-[reader-writer lock](#reader-writer-lock) are worthy of more investigation to
-replace the current `mutex/cond_wait` implementation.
+  [kernel locking](https://www.kernel.org/doc/html/v5.1/kernel-hacking/locking.html)
+
+evtdemo
+-------
+The first program, `evtdemo.c` is an event delivery framework based on a
+producer/consumer architecture.  There are four threads:
+
+1. **MGMT** is the main process of the event framework to start/stop the FSMs and
+   send events to them. It has no states.  It can generate the following events
+   either from the keyboard or a script file.
+   
+2. **C1** is consumer thread receiving events from MGMT
+
+3. **C2** is a consumer thread receiving events from MGMT
+
+4. **TSRV** is the timer service.
+
+The **MGMT** thread has no states but can generate on-demand events from a user
+interface or script file 
+([Unit and Regression Testing](#unit-and-regression-testing)).
+
+**TSRV** is a service used by the other threads to create/manage timers and timer
+events.  A worker creates and sets a timer with the **TSRV** thread using the
+`fsmtimer` API.  Note that the `fsmtimer` API has an internal mutex to protect against
+race conditions.
+
+When a timer expires, the **TSRV** delivers the corresponding event to all
+worker threads.  This thread  uses the Linux
+[epoll](https://man7.org/linux/man-pages/man7/epoll.7.html) and
+[timerfd](https://man7.org/linux/man-pages/man2/timerfd_create.2.html)
+APIs to implement timers. It can support a maximum of four concurrent timers.
+
+See the inline documentation for more information.
+
+fsmdemo
+-------
+This program implements two interworking FSMs using the event delivery
+framework in [evtdemo](#evtdemo).  The major difference with
+[evtdemo](#evtdemo) is the two consumers threads are replace with FSM
+implementations:
+
+* **C1** is replaced with **FSM1**, the thread for the traffic stoplight.
+* **C2** is replaced with **FSM2**, the thread for the crosswalk.
+
+FSM1 (stoplight) UML state diagram
+----------------------------------
+![FSM1 UML Diagram](fsm_stoplight.png)
+
+FSM2 (crosswalk) UML state diagram
+----------------------------------
+![FSM2 UML Diagram](fsm_crosswalk.png)
+
+Alternative API Research
+========================
+These are some of the kernel and system mechanisms I investigated as
+alternatives to the classic mutex/cond_wait and linked list APIs from above. 
+
+The [FIFO](#fifo) and [reader-writer lock](#reader-writer-lock) are worthy of
+more investigation to replace the current mutex/cond_wait implementation.
 
 Events
 ------
@@ -206,64 +280,6 @@ As with the workqueue, RCU is too complex for the purpose of this project.
 https://www.kernel.org/doc/html/v5.11/kernel-hacking/locking.html#avoiding-locks-read-copy-update
 https://www.kernel.org/doc/html/v5.11/RCU/index.html
 -->
-
-Project Documentation
-=====================
-This **README** is the primary project documentation.
-
-The project is version-controlled on github at
-[github:dturvene FSM](https://github.com/dturvene/finite-state-machine)
-
-The source code is heavily documented using the 
-[Kernel Doc](https://www.kernel.org/doc/html/v5.1/doc-guide/kernel-doc.html)
-syntax.
-
-evtdemo
-=======
-The first program, `evtdemo.c` is an event delivery framework based on a
-producer/consumer architecture.  MGMT sends `fsm_events` to two worker threads.
-Each worker thread will call the TSRV API to create and start one or more
-timers managed by the TSRV thread.
-
-The `TSRV` thread uses the Linux
-[epoll](https://man7.org/linux/man-pages/man7/epoll.7.html) and
-[timerfd](https://man7.org/linux/man-pages/man2/timerfd_create.2.html)
-APIs to implement timers. It can support a maximum of four concurrent timers.
-
-See the inline documentation for more information.
-
-fsmdemo
-=======
-This program implements two interworking FSMs using the event delivery
-framework. There are four threads:
-
-1. `MGMT` is the main process of the event framework to start/stop the FSMs and
-   send events to them. It has no states.  It can generate the following events
-   either from the keyboard or a script file.
-   
-2. `FSM1` is the thread for the traffic stoplight.
-
-3. `FSM2` is the thread for the crosswalk.
-
-4. `TSRV` is the timer service.
-
-The `MGMT` thread has no states but can generate on-demand events from a user
-interface or script file 
-([Unit and Regression Testing](#unit-and-regression-testing)).
-
-`TSRV` is a service used by the other threads to create/manage timers and timer
-events.  A worker creates and sets a timer with the TSRV thread using the
-`fsmtimer` API.  The `fsmtimer` API has an internal mutex to protect against
-race conditions.  When a timer expires, the `TSRV` delivers the corresponding
-event to all worker threads.
-
-FSM1 (stoplight) state diagram
-------------------------------
-![FSM1](fsm_stoplight.png)
-
-FSM2 (crosswalk) state diagram
-------------------------------
-![FSM2](fsm_crosswalk.png)
 
 FSM Unit and Regression Testing
 ===============================
