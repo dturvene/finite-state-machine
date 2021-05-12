@@ -86,6 +86,7 @@ int evt_parse_buf(const char const *buf)
 				printf("\tw: show workers and curr state\n");
 				printf("\tb: crosswalk button push\n");
 				printf("\tg: go %s\n", evt_name[E_INIT]);
+				printf("\teN: send event id N\n");
 				printf("\tf: set timer fast\n");
 				printf("\ttN: toggle timer N\n");
 				printf("\tr: run event input script %s\n", scriptfile);
@@ -128,6 +129,13 @@ int evt_parse_buf(const char const *buf)
 				show_workers();
 				printf("*** END FSM status\n");
 				break;
+			case 'e':
+			{
+				/* get next char and convert to int */
+				uint32_t evtid = (uint32_t)(*++sp - 0x30);
+				workers_evt_broadcast(evtid);
+			}
+			break;
 			case 't':
 			{
 				/* get next char and convert to int */

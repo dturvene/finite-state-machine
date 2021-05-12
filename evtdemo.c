@@ -58,10 +58,18 @@
  * arguments - descriptive string for all commandline arguments
  */
 char *arguments = "\n"							\
+	" -t tick: timer tick in msec\n"				\
 	" -s scriptfile: read events from file\n"			\
 	" -n: non-interactive mode (only read from scriptfile)\n"	\
 	" -d level: set debug_flag to hex level\n"			\
 	" -h: this help\n";
+
+/**
+ *
+ * tick - a base timer value multiplied to all timers (see the timer service)
+ *
+ */
+uint32_t tick = 1000;
 
 /**
  * scriptfile - file name for event script to inject events
@@ -92,8 +100,12 @@ int cmdline_args(int argc, char *argv[]) {
 	int opt;
 	int argcnt = 0;
 	
-	while((opt = getopt(argc, argv, "s:nd:h")) != -1) {
+	while((opt = getopt(argc, argv, "t:s:nd:h")) != -1) {
 		switch(opt) {
+		case 't':
+			tick = strtoul(optarg, NULL, 0);
+			printf("Setting timer tick to %u\n", tick);
+			break;
 		case 's':
 			strncpy(scriptfile, optarg, sizeof(scriptfile)-1);
 			printf("Setting %s to %s\n", scriptfile, optarg);
@@ -177,16 +189,16 @@ void *evt_c1(void *arg)
 		switch(evt_id) {
 		case E_TIMER:
 			break;
-		case E_TMR_LIGHT:
-			dbg("timer 2 (TMR_LIGHT) expiry");
+		case E_LIGHT:
+			dbg("timer 2 (E_LIGHT) expiry");
 			break;
-		case E_TMR_CROSS:
-			dbg("timer 3 (TMR_CROSS) expiry");
+		case E_BLINK:
+			dbg("timer 3 (E_BLINK) expiry");
 			break;
 		case E_INIT:
-			dbg("create 2 (E_TMR_LIGHT)");
-			create_timer(2, E_TMR_LIGHT);
-			dbg("set timer 2 TMR_LIGHT = 2000");
+			dbg("create 2 (E_LIGHT)");
+			create_timer(2, E_LIGHT);
+			dbg("set timer 2 2000");
 			set_timer(2, 2000);		
 			break;
 		case E_DONE:
@@ -226,22 +238,15 @@ void *evt_c2(void *arg)
 		
 		switch(evt_id) {
 		case E_TIMER:
-			dbg("set 3 TMR_CROSS = 1000");			
+			dbg("set 3 E_BLINK 1000");			
 			set_timer(3, 1000);
 			break;
-#if 0			
-		case E_TMR_LIGHT:
-			break;
-#endif
-		case E_TMR_CROSS:
-			dbg("timer 3 (TMR_CROSS) expiry");
+		case E_BLINK:
+			dbg("timer 3 expiry");
 			break;
 		case E_INIT:
 			dbg("create timer 3");
-			create_timer(3, E_TMR_CROSS);
-			break;
-		case E_IDLE:
-			nap(100);
+			create_timer(3, E_BLINK);
 			break;
 		case E_DONE:
 			pthread_exit(NULL);
@@ -251,84 +256,6 @@ void *evt_c2(void *arg)
 		} /* switch */
 	} /* while */
 	
-	dbg("exitting...");
-}
-
-
-/**
- * TODO: copy 
- */
-void evt_producer(void)
-{
-	int fd_epoll;                 /* epoll reference */
-	struct epoll_event event;     /* struct to add to the epoll list */
-	struct epoll_event events[MAX_WAIT_EVENTS]; /* struct return from epoll_wait */
-	int done = 0;
-
-	/* create epoll */
-	if (-1 == (fd_epoll=epoll_create1(0)))
-		die("epoll");
-
-	/* add stdin to epoll for user control */
-	event.data.fd = STDIN_FILENO;
-	event.events = EPOLLIN;
-	if (-1 == epoll_ctl(fd_epoll, EPOLL_CTL_ADD, event.data.fd, &event))
-		die("epoll_ctl for STDIN");
-
-	/* event loop */
-	printf("%s: Enter event, 'h' for help, 'x' to exit\n", __func__);
-	fflush(stdout);
-	while (!done) {
-		int nfds; /* number of ready file descriptors */
-
-		dbg_verbose("poll_wait");
-		
-		/* wait for desciptors or timeout (in ms, -1 no timeout) */
-		nfds=epoll_wait(fd_epoll, events, MAX_WAIT_EVENTS, -1);
-
-		/* 
-		 * nfds < 0: error
-		 * nfds == 0: timeout
-		 * nfds > 0: number of descriptors with pending I/O
-		 */
-		switch(nfds) {
-		case -1:
-			/* if poll returns due to an signal interrupt then do nothing 
-			 * otherwise die
-			 */
-			if (errno != EINTR)
-				die("epoll_wait");
-			break;
-		case 0:
-			dbg("epoll timeout");
-		break;
-		default:
-		{
-			int i;
-			for (i=0; i<nfds; i++) {
-				/* bad event or corrupted file descriptor */
-				if (!(events[i].events&EPOLLIN))
-					die("bad incoming event");
-
-				if (events[i].data.fd == STDIN_FILENO) {
-					char buf[2];
-					int len;
-					
-					/* line buffered by tty driver so must hit CR to read */
-					len=read(events[i].data.fd, buf, sizeof(buf));
-					/* replace CR with string termination */
-					buf[len] = '\0';
-					if (debug_flag & DBG_DEEP)
-						printf("\nread %d: %s\n", len, buf);
-
-					done = evt_ondemand(buf[0]);
-				}
-			}
-		}
-		break;
-		} /* switch */
-	} /* while */
-
 	dbg("exitting...");
 }
 
@@ -367,8 +294,10 @@ int main(int argc, char *argv[])
 		die("timer_service create");
 
 	worker_list_create();
-	worker_list_add(worker_create_self(&evt_c1, "consumer1"));
-	worker_list_add(worker_create_self(&evt_c2, "consumer2"));	
+	worker_list_add(worker_create(&evt_c1, "consumer1"));
+	worker_list_add(worker_create(&evt_c2, "consumer2"));
+
+	/* create a test timer */
 
 	/* loop until 'x' entered */
 	non_interactive ? evt_script() : evt_producer();

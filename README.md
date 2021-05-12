@@ -28,22 +28,24 @@ developing this code is as follows:
 There are two substantial efforts under this project.
 
 1. Develop a simple, reliable event delivery framework to/from
-   a set of POSIX "worker" threads: [evtdemo](#evtdemo).
+   a set of POSIX "worker" threads.
    
 2. Use the event delivery framework to drive two cooperating FSMs:
-   a stoplight and a corresponding crosswalk based on timer
-   events. Additionally there is an ondemand button to trigger a red light and
-   "walk" crosswalk: [fsmdemo](#fsmdemo).
+   a stoplight and a corresponding crosswalk.  The events will primarily be
+   based on timer expiration (e.g. read light timeout.) 
+   Additionally there is an ondemand button to trigger a red light and
+   "walk" crosswalk.
    
 I made a good number of architecture decisions in developing the code after
-[Alternative API Research](#alternative-api-research). Some are fruit for
-future research.
+investigations documented in 
+[Alternative API Research](#alternative-api-research). 
+Some alternate patterns are fruit for future research.
 
 Project Documentation
 ---------------------
 This **README** is the primary project documentation.
 
-The project is version-controlled on github at
+All C/Makefile/script software for this project is version-controlled at
 [github:dturvene FSM](https://github.com/dturvene/finite-state-machine)
 
 The source code is heavily documented using the 
@@ -69,19 +71,20 @@ software-based systems as well as for modeling business and similar processes.
 
 I will focus Chapter 14 **State Machines** and even then not implement much of
 the described behavior.  Additionally Chapter 16 **Actions** and Section 13.3
-**Events** are implicitly used in this document.
+**Events** are implicitly used in this document to describe the FSMs.
 
 The basic requirements for the FSMs implemented in this project are:
 
 * simple to understand and interpret events/transitions,
 * deterministic,
-* minimal number of events generated/consumed.
+* relatively easy to modify and debug,
+* capable of quickly unit and regression testing.
 
-Another design decision I made is to send all events to all FSMs to simplify
-the event delivery framework. Thus a FSM that generates an event will also
+One design decision I made is to send all events to all FSMs to simplify
+the event delivery framework. Thus an FSM that generates an event will also
 receive it. If it is in state to accept the event then the transition logic
-will be run, otherwise the event will be discarded.  At the `DBG_DEEP`
-verbosity (`-d 0x20`) a   `NO match` debug message will be geneate by the fsm
+will be run, otherwise the event will be discarded.  Using the `DBG_DEEP`
+verbosity (`-d 0x20`), a   `NO match` debug message will be generate by the FSM
 logic.
 
 Each Transition (UML 14.2.3.8) is a struct of:
@@ -92,9 +95,9 @@ Each Transition (UML 14.2.3.8) is a struct of:
 * next state
 
 As described in UML 14.2.3.8.3, a transition may have a guard condition. This
-boolean condition will allow the transition if the function returns `true` and
-deny it if `false`. If the guard condition returns `false` the
-transition to the next state will not be completed and the event will be
+boolean condition will allow the transition to proceed if the function returns
+`true` and deny it if `false`. If the guard condition returns `false` the
+transition to the next state will not proceed and the event will be
 discarded.
 
 Each State (UML 14.2.3.4) is a struct of:
@@ -103,13 +106,23 @@ Each State (UML 14.2.3.4) is a struct of:
 * entry_action function (UML 14.2.3.4.5)
 * exit_action function (UML 14.2.3.4.6)
 
-Finally, the FSM is defined as a set of Transitions from one State to the
-next when an Event is injected into the FSM driver function.
+The “char name” is debugging. The `entry_action` is a function called when the 
+state is entered and the `exit_action` is a function called when the state is
+being left (transition to a new state.) These functions are small: generally
+sending an event or (re)setting a timer. An action function cannot block the
+thread. 
 
-Finally, the FSMs in this project are a proper subset of UML 14.  For example, 
-there is a lot more complexity to the UML `State` class including history,
-substates and enhanced actions.  However, these extensions create a more
-difficult software implementation of the FSMsx.
+Tying the structures together, the FSM is defined as a table of
+Transitions. The generic FSM run logic will match the tuple (current state,
+event id) to an entry in the FSM table and call the appropriate logic. As
+mentioned above, if that tuple does not exist then the FSM will stay in the
+current state and discard the event.
+
+Finally, the FSMs in this project are a proper subset of UML 14. There is a
+great deal more complexity to the UML State, Transaction, Action classes than
+represented in this project (e.g. history, substates and enhanced actions.)
+However, these extensions create a more difficult software implementation of
+the FSMs and not much general utility; they are for boundary patterns.
 
 Glossary and Definitions
 ========================
@@ -134,7 +147,7 @@ by these two FSMs.
 
 Software APIs
 -------------
-As mentioned earlier, for this project I am focussing on the Linux kernel and
+As mentioned earlier, for this project I am focusing on the Linux kernel and
 device drivers.  The code is developed in C and, where possible, mimics the 
 [Linux kernel API](https://www.kernel.org/doc/html/v5.11/core-api/kernel-api.html).
 Where a suitable kernel API was not possible, the software uses
@@ -144,7 +157,7 @@ The APIs used in this project include the following.
 
 * The linked list uses the `libnl3/netlink/list.h` macros, which are a
   replica of the macros in [kernel list management][]
-  and implemented in `$K/include/linux/list.h`.
+  implemented in `$K/include/linux/list.h`.
 * `pthread_` and `pthread_cond_` calls as defined in [POSIX threads][]
   are roughly comparable to the kernel `kthread_` and `wait_event_` APIs
   described in 
@@ -154,7 +167,7 @@ The APIs used in this project include the following.
 
 evtdemo
 -------
-The first program, `evtdemo.c` is an event delivery framework based on a
+The first program, `evtdemo.c`, is an event delivery framework based on a
 producer/consumer architecture.  There are four threads:
 
 1. **MGMT** is the main process of the event framework to start/stop the FSMs and
@@ -172,12 +185,12 @@ interface or script file
 ([Unit and Regression Testing](#unit-and-regression-testing)).
 
 **TSRV** is a service used by the other threads to create/manage timers and timer
-events.  A worker creates and sets a timer with the **TSRV** thread using the
-`fsmtimer` API.  Note that the `fsmtimer` API has an internal mutex to protect against
-race conditions.
+events.  Workers create and set timers with the **TSRV** thread using the
+`fsmtimer` API.  Note that the `fsmtimer` API has an internal mutex to protect
+against race conditions.
 
 When a timer expires, the **TSRV** delivers the corresponding event to all
-worker threads.  This thread  uses the Linux
+worker threads.  **TSRV** uses the Linux
 [epoll](https://man7.org/linux/man-pages/man7/epoll.7.html) and
 [timerfd](https://man7.org/linux/man-pages/man2/timerfd_create.2.html)
 APIs to implement timers. It can support a maximum of four concurrent timers.
@@ -187,9 +200,8 @@ See the inline documentation for more information.
 fsmdemo
 -------
 This program implements two interworking FSMs using the event delivery
-framework in [evtdemo](#evtdemo).  The major difference with
-[evtdemo](#evtdemo) is the two consumers threads are replace with FSM
-implementations:
+framework in [evtdemo](#evtdemo).  The major difference is the two consumers
+threads are replace with FSM implementations:
 
 * **C1** is replaced with **FSM1**, the thread for the traffic stoplight.
 * **C2** is replaced with **FSM2**, the thread for the crosswalk.
@@ -198,9 +210,131 @@ FSM1 (stoplight) UML state diagram
 ----------------------------------
 ![FSM1 UML Diagram](fsm_stoplight.png)
 
+FSM1 Implementation
+-------------------
+The code for FSM1 is below. There are five states, each with an enter and exit
+action. Each state has one or more transitions in the FSM1 transition table.
+
+```
+/* Default states */
+fsm_state_t s_init = {"S:INIT", act_enter, act_exit};
+fsm_state_t s_done = {"S:DONE", act_done, NULL};
+/**
+ * FSM1, stoplight
+ */
+fsm_state_t s_stoplight_init = {"S:INIT", stoplight_init_enter, act_exit};
+fsm_state_t s_red = {"S:RED", red_enter, act_exit};
+fsm_state_t s_green = {"S:GREEN", green_enter, act_exit};
+fsm_state_t s_yellow = {"S:YELLOW", yellow_enter, act_exit};
+fsm_state_t s_green_but = {"S:GREEN_BUT", green_but_enter, act_exit};
+fsm_trans_t FSM1[] = {
+ /* specific init for timers, transition to s_green */
+ {&s_stoplight_init, E_INIT, NULL, &s_green},
+/* GREEN */
+ {&s_green, E_LIGHT, NULL, &s_yellow},
+ {&s_green, E_DONE, NULL, &s_done},
+ {&s_green, E_BUTTON, but_constraint, &s_green_but},
+/* YELLOW */
+ {&s_yellow, E_LIGHT, NULL, &s_red},
+ {&s_yellow, E_DONE, NULL, &s_done},
+/* RED */
+ {&s_red, E_LIGHT, NULL, &s_green},
+ {&s_red, E_DONE, NULL, &s_done},
+/* GREEN BUT */
+ {&s_green_but, E_LIGHT, NULL, &s_yellow},
+ // TODO: NO DONE? {&st_green_but, E_DONE, &st_done},
+};
+```
+
+The first transition is the init state `s_stoplight_init`. On entry it runs the
+`stoplight_init_enter` function, which creates the timers and sets the values
+(but does not start them!) In the `stoplight_init_enter` function notice that
+timer `TID_LIGHT` is created to generate an `E_LIGHT` event. 
+
+```
+/**
+ * stoplight_init_enter - init stoplight FSM
+ *
+ * When FSMs are started with E_INIT event, each is responsible to provision
+ * itself.  This creates two timers: TID_LIGHT for changing the stoplight
+ * and TID_BLINK for crosswalk blinking.  A set of timeout values are configured
+ * as increments of the command line argument `tick`.
+ * - t_norm: normal timeout for light change
+ * - t_fast: timeout for yellow light, which is brief
+ * - t_but: timeout for light when button is pressed
+ * - t_blink: crosswalk blinking when stoplight is getting near S:GREEN
+ */
+static void stoplight_init_enter(void *arg)
+{
+ ACT_TRACE();
+/* create timers with event on expiry */
+ create_timer(TID_LIGHT, E_LIGHT);
+ create_timer(TID_BLINK, E_BLINK);
+/* update timer expiry periods to be adjustable */
+ t_norm *= tick;
+ t_fast *= tick; 
+ t_but *= tick;
+ t_blink *= tick;
+}
+```
+
+Now look at the state `s_green` which has three transitions:
+
+* `E_LIGHT`, where the next state is `s_yellow`
+* `E_DONE`, where the next state is `s_done`
+* `E_BUTTON`, where the next state is `s_green_but`
+
+The UML diagram above illustrates the progress for each event.
+
+We see from the init function that the `TID_LIGHT` timer is created but how is
+it started? The timer start could have been added to the `stoplight_enter_init`
+function but it is better to start it after the transition to `s_green` in its
+entry function: 
+
+```
+/**
+ * green_enter - broadcast event and set light timer for normal
+ * timeout.
+ */
+static void green_enter(void *arg)
+{
+ ACT_TRACE();
+ workers_evt_broadcast(E_GREEN);
+ set_timer(TID_LIGHT, t_norm);
+}
+```
+
+Using this pattern, the `TID_LIGHT` timer is (re)set to the desired value
+regardless of which state the FSM transitions from. 
+
+Almost every state has an `E_DONE` transition. This always enters the `s_done`
+state which has only the `act_done` entry point, calling `pthread_exit` to end the
+FSM thread. 
+
+If a state does NOT have an `E_DONE` transition then the FSM cannot exit when in
+that state, and will hang when the other threads exit. Use the SIGINT signal
+(via keyboard ^C ) to exit the entire process. 
+
+```
+/**
+ * act-done - when the E_DONE event is received, exit the thread immediately.  The main thread 
+ * waits on pthread_join to reap the worker threads.
+ */
+static void act_done(void *arg)
+{
+ ACT_TRACE();
+ pthread_exit(NULL);
+}
+```
+
 FSM2 (crosswalk) UML state diagram
 ----------------------------------
 ![FSM2 UML Diagram](fsm_crosswalk.png)
+
+From the FSM1 code fragments above, one can see an example of the `s_green`
+state generating an `E_GREEN` event to all the FSMs. In FSM2 we see that an
+`E_GREEN` event will cause a transition from the `s_blinking` state to the
+`s_nowalk` state.
 
 Alternative API Research
 ========================

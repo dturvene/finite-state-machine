@@ -219,7 +219,6 @@ fsm_trans_t FSM1[] = {
 	/* GREEN BUT */
 	{&s_green_but, E_LIGHT, NULL, &s_yellow},
 	// TODO: NO DONE? {&st_green_but, E_DONE, &st_done},
-
 };
 
 /**

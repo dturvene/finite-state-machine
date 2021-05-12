@@ -2,28 +2,40 @@
 # ./evtdemo -n
 # send workers go event to run
 g
+
 # main thread nap to let the workers run a little
-n
+n1
+
 # send E_TIMER to workers
-t
+e9
+
 # nap to capture worker responses
-n
+n5
+
 # toggle-off timers 3 and 2
-3 2
+t3 t2
+
 # check for unknown command and show help
 z h
-# nap to flush prior timer events and then again to confirm no more timer expiry
-n n
+
+# nap to flush prior timer events
+n2
+
 # toggle-on 2 and set it to fast timer
-2 f
-# show current timers
-s
-# nap
-n
+t2 f
+
+# nap and show current timers
+# LIGHT TIMER=500
+n1 s
+
 # set timer 2 to slow
 f
-# nap for two times
-n n
+
+# nap and show current timers
+# LIGHT TIMER=2000
+n2 s
+
+
 # exit all threads and join
 x
 # script eof
