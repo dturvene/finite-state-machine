@@ -9,6 +9,7 @@
 #include <sys/epoll.h>   /* epoll_ctl */
 #include <utils.h>
 #include <timer.h>
+#include <workers.h>
 
 #define MAX_TIMERS 4
 

@@ -19,8 +19,6 @@
 #include <pthread.h>     /* posix threads */
 #include <libnl3/netlink/list.h> /* kernel-ish linked list */
 #include <evtq.h>
-#include <fsm.h>
-#include <workers.h>
 
 typedef struct fsmtimer {
 	struct nl_list_head list;
