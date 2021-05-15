@@ -11,8 +11,13 @@
 #include <fsm.h>
 
 /**
- * dbg_trans -
+ * dbg_trans - write to stdout detailed information about the FSM state transition
+ * @fsm_p - pointer to FSM context
+ * @nextst_p - pointer to presumptive next state (before guard check)
+ * @evt_id - event id
  *
+ * string containing thread, timestamp, evtid, currstate to nextstate
+ * This is called before transition guard check.
  */
 void dbg_trans(fsm_trans_t *fsm_p, fsm_state_t *nextst_p, fsm_events_t evt_id)
 {
@@ -39,6 +44,19 @@ void dbg_trans(fsm_trans_t *fsm_p, fsm_state_t *nextst_p, fsm_events_t evt_id)
 	write(1, buf, strlen(buf));
 }
 
+/**
+ * next_state - find next state in FSM table and return it
+ * @fsm_p - pointer to FSM context
+ * @evt_id - event id
+ *
+ * loop through the FSM transition table, matching curr state and evt_id
+ * then return a pointer to the next state.
+ *
+ * Return: pointer to next state or NULL if no match
+ *
+ * TODO: make evt_id match in the transition table more efficient.  We already
+ * know current state so just a matter of matching the evt_id.
+ */
 fsm_state_t *next_state(fsm_trans_t *fsm_p, fsm_events_t evt_id)
 {
 	fsm_trans_t *t_p = fsm_p;
@@ -59,7 +77,17 @@ fsm_state_t *next_state(fsm_trans_t *fsm_p, fsm_events_t evt_id)
 }
 
 /**
- * fsm_run -
+ * fsm_run - crank the FSM once for input event
+ * @fsm_p - the FSM context
+ * @evt_id - the event id
+ *
+ * - find the next state
+ * - if valid (not NULL), check for a guard
+ * - if guard, call it and return if fails (false)
+ * - otherwise 
+ * -  call exit action of the current state
+ * -  move to next state
+ * -  call entry action of new current state
  *
  * Return:
  *  -1: FSM failure, 
@@ -78,6 +106,8 @@ int fsm_run(fsm_trans_t* fsm_p, fsm_events_t evt_id)
 		/* check if guard and run it, if guard fails set ret to 1 */
 		if (fsm_p->guard && (false == fsm_p->guard(fsm_p)))
 		{
+			dbg_verbose("Guard FAILED");
+			/* set to guard failed */
 			ret = 1;
 		} else {
 			/* before transition to next state, run curr state
@@ -95,6 +125,7 @@ int fsm_run(fsm_trans_t* fsm_p, fsm_events_t evt_id)
 				fsm_p->currst_p->entry_action(fsm_p->currst_p);
 			}
 
+			dbg_verbose("Guard PASSED");
 			/* set to success! */
 			ret = 0;
 		}

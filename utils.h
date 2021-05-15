@@ -49,7 +49,7 @@ inline static void nap(uint32_t ms)
 /**
  * relax - calling thread is rescheduled so waiting threads can run
  * 
- * nap(1) performs a similar function.
+ * See man:sched_yield for more info
  */
 inline static void relax()
 {

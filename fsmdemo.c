@@ -141,15 +141,26 @@ void set_sig_handlers(void) {
  * fsm_task - archetype event consumer thread
  * @arg: worker_t context
  *
+ * This is the generic FSM task.  It's a simple infinite loop that
+ * - dequeues an event enqueued from another thread (or possibly this thread)
+ * - injects the event into the FSM
+ * All context persists in the worker_t instance.
  */
 void *fsm_task(void *arg)
 {
 	worker_t* self_p = (worker_t*) arg;
         fsm_events_t evt_id;
 
+	/* init the FSM and call the the init state enter functiuon */
 	fsm_init(self_p->fsm_p);
 
-	/* worker_self() loops through worker_list for match on pthread_self */
+	/* The main lupe
+	 * dequeue event and call dbg_evts for runtime dump
+	 * fsm_run for the fsm instance, injecting evt_id
+	 *
+	 * This is an infinite loop, either ^C (SIGINT) or
+	 * E_DONE event will cause the FSM to call pthread_exit
+	 */
 	while (true)
 	{
 		evtq_dequeue(self_p->evtq_p, &evt_id);
@@ -164,13 +175,16 @@ void *fsm_task(void *arg)
  * main - a simple driver for an event producer/consumer framework (MGMT)
  *
  * @argc: argument count, this will be decremented by cmdline_args()
- * @argv: list of arguments, passed to cmdlin_args() and the printed and discarded.
+ * @argv: list of arguments, passed to cmdlin_args() all remaining args are 
+ *        discarded.
  * 
  * - process command line arguments
  * - set signal handlers (just in case)
- * - create an event queue for the consumer
- * - create the consumer pthread
- * - call the evt_producer function from the main thread
+ * - start timer service thread
+ * - create a worker list
+ * - create the worker pthread(s) and add to worker list
+ * - call the evt_script | evt_producer function from the main thread
+ * - cancel timer service
  * - wait for consumer thread to terminate
  * - destroy event_queue for the consumer
  */

@@ -1,0 +1,42 @@
+# default script to regression test fsmdemo
+# run
+#  -t NNN: set tick to faster than default 1000ms
+#  -d 0x01: FSM transition debug
+# ./fsmdemo -n [-t 50] [-d 0x01]
+# SIGINT to interrupt and exit
+# start FSMs and let settle
+g n1
+
+# GREEN, DONT WALK
+s n8
+
+# YELLOW, DONT WALK
+s n5
+
+# RED, WALK
+s n9
+
+# RED, BLINKING WALK
+s n2
+
+# GREEN, DONT WALK
+s n3
+
+# press walk button, nap, GREEN BUT, DONT WALK and timer0=1 tick
+b n1 s
+
+# YELLOW, DONT WALK, timer0=3 tick
+n1 s
+
+# RED, WALK
+n3 s
+
+# RED, BLINKING WALK
+n8 s
+
+# GREEN, NO WALK
+n3 s
+
+# exit script
+x
+#script eof
