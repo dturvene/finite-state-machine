@@ -18,8 +18,9 @@
 #include <string.h>
 #include <pthread.h>     /* posix threads */
 #include <libnl3/netlink/list.h> /* kernel-ish linked list */
-#include <evtq.h>
-#include <fsm.h>
+#include "utils.h"
+#include "evtq.h"
+#include "fsm.h"
 
 typedef struct worker {
 	struct nl_list_head list;
@@ -33,7 +34,10 @@ typedef struct workers {
 	worker_t head;
 } workers_t;
 
-workers_t workers;
+/*
+ * defined as a global in main program
+ */
+extern workers_t workers;
 
 inline static worker_t * worker_create(void *(*startfn_p)(void*), char* name)
 {
@@ -96,6 +100,8 @@ inline static const char* worker_get_name(void)
 	worker_t *w_p = worker_self();
 	if (w_p)
 		return w_p->name;
+
+	return (NULL);
 }
 
 inline static worker_t *worker_find_by_name(const char *name)

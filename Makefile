@@ -67,7 +67,7 @@ $(DEPFILES):
 include $(wildcard $(DEPFILES))
 
 run:
-	@echo 'check $$LD_LOAD_LIBRARY=.:$$LD_LOAD_LIBRARY'
+	@echo 'check $$LD_LIBRARY_PATH=.:$$LD_LOAD_PATH'
 	@echo Run regression tests, speeding up timers
 	./evtdemo -n -t 200
 	./fsmdemo -n -t 100

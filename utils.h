@@ -83,7 +83,7 @@ inline static void _dbg_func(const char *func, const char *msg)
 	write(1, buf, strlen(buf));
 }
 
-volatile uint32_t debug_flag;
+extern uint32_t debug_flag;
 #define DBG_NONE    0x00
 #define DBG_TRANS   0x01  
 #define DBG_EVTS    0x02

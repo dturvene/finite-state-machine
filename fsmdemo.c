@@ -18,10 +18,10 @@
 #include <signal.h>      /* sigaction */
 #include <string.h>      /* strlen, strsignal,, memset */
 #include <pthread.h>     /* posix threads */
-#include <utils.h>
-#include <evtq.h>
-#include <fsm.h>
-#include <workers.h>
+#include "utils.h"
+#include "evtq.h"
+#include "fsm.h"
+#include "workers.h"
 
 #include <fsm_defs.h>
 
@@ -48,8 +48,9 @@ char *arguments = "\n"							\
 uint32_t tick = 1000;
 
 /**
- * scriptfile - file name for event script to inject events
+ * scriptfile - default file name for event script to inject events
  * into consumer.
+ * use the '-s filename' option to override
  */
 char scriptfile[64] = "./fsmdemo.script";
 
@@ -59,6 +60,11 @@ char scriptfile[64] = "./fsmdemo.script";
  *  is read for input.  The script file must contain an 'x' event.                
  */
 static bool non_interactive = false;
+
+/**
+ * debug_flag - bitmask for enabling levels of logging
+ */
+uint32_t debug_flag;
 
 /**
  * cmdline_args - parse command line arguments
@@ -74,7 +80,6 @@ static bool non_interactive = false;
  */
 int cmdline_args(int argc, char *argv[]) {
 	int opt;
-	int argcnt = 0;
 	
 	while((opt = getopt(argc, argv, "t:s:nd:h")) != -1) {
 		switch(opt) {
@@ -170,6 +175,11 @@ void *fsm_task(void *arg)
 	
 	dbg("exitting...");
 }
+
+/*
+ * workers - global linked list of worker threads.  See workers.h
+ */
+workers_t workers;
 
 /**
  * main - a simple driver for an event producer/consumer framework (MGMT)

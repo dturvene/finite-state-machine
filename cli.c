@@ -8,10 +8,10 @@
 
 #include <sys/epoll.h>   /* epoll_ctl */
 
-#include <utils.h>
-#include <timer.h>
-#include <evtq.h>
-#include <workers.h>
+#include "utils.h"
+#include "timer.h"
+#include "evtq.h"
+#include "workers.h"
 
 /* default or set in the program arguments */
 extern char scriptfile[];
@@ -32,7 +32,7 @@ extern uint32_t tick;
 void evt_script(void)
 {
 	FILE *fin;
-	int len, i;
+	int len;
 	char buf[120];
 	
 	if (NULL == (fin=fopen(scriptfile, "r")))
@@ -73,7 +73,7 @@ void evt_script(void)
  * This function maps the chars to an internal event id (defined in evtq.h) and
  * pushes it to all workers.
  */
-int evt_parse_buf(const char const *buf)
+int evt_parse_buf(const char *buf)
 {
 	int ret = 0;
 	const char *sp = buf;

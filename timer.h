@@ -35,7 +35,7 @@ typedef struct timer_list {
 } timer_list_t;
 
 extern int create_timer(uint32_t timerid, fsm_events_t evtid);
-extern int set_timer(uint32_t timerid, uint64_t tick_ms);
+extern void set_timer(uint32_t timerid, uint64_t tick_ms);
 extern int stop_timer(uint32_t timerid);
 extern uint64_t get_timer(uint32_t timerid);
 extern int toggle_timer(uint32_t timerid);

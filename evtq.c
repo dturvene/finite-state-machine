@@ -6,9 +6,9 @@
  * event queue
  */
 
-#include <utils.h>
-#include <evtq.h>
-#include <workers.h>
+#include "utils.h"
+#include "evtq.h"
+#include "workers.h"
 
 /**
  * evtq_create - create a queue instance
@@ -57,7 +57,6 @@ void evtq_destroy(evtq_t* q_p)
 void evtq_enqueue(evtq_t *evtq_p, fsm_events_t evt_id)
 {
 	struct fsm_event *ep;
-	char msg[80];
 
 	pthread_mutex_lock(&evtq_p->mutex);
 	

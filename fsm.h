@@ -55,12 +55,13 @@ typedef struct fsm_trans {
 /*
  * action debug macro
  */
-#define ACT_TRACE() do { \
-		if (debug_flag & DBG_DEEP) {				\
-			fsm_state_t *state_p = (fsm_state_t*) arg;	\
-			printf("%s:%s %s\n", worker_get_name(), __func__, state_p->name); \
-		}							\
-	} while(0);
+#define ACT_TRACE() \
+do {									\
+	if (debug_flag & DBG_DEEP) {					\
+		fsm_state_t *state_p = (fsm_state_t*) arg;		\
+		printf("%s:%s %s\n", worker_get_name(), __func__, state_p->name); \
+	}								\
+} while(0);
 
 /**
  * fsm_init - start FSM (when E_INIT is received)

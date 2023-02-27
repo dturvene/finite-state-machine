@@ -156,6 +156,7 @@ static void walk_enter(void *arg)
 	set_timer(TID_BLINK, t_blink);
 }
 
+#if 0
 /*
  * walk-exit - clear the crosswalk blink timer
  */
@@ -164,6 +165,7 @@ static void walk_exit(void *arg)
 	ACT_TRACE();
 	set_timer(TID_BLINK, 0);
 }
+#endif
 
 /**
  * but_constraint - a UML guard for trans to S:GREEN_BUT

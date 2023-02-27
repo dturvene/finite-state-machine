@@ -46,10 +46,10 @@
 #include <string.h>      /* strlen, strsignal,, memset */
 #include <pthread.h>     /* posix threads */
 #include <sys/epoll.h>   /* epoll_ctl */
-#include <utils.h>
-#include <evtq.h>
-#include <timer.h>
-#include <workers.h>
+#include "utils.h"
+#include "evtq.h"
+#include "timer.h"
+#include "workers.h"
 
 /* max number of epoll events to wait for */
 #define MAX_WAIT_EVENTS 1
@@ -85,6 +85,11 @@ char scriptfile[64] = "./evtdemo.script";
 static bool non_interactive = false;
 
 /**
+ * debug_flag - bitmask for enabling levels of logging
+ */
+uint32_t debug_flag;
+
+/**
  * cmdline_args - parse command line arguments
  * @argc: argument count (from main)
  * @argv: array aligned with argc containing an argument string (from main)
@@ -98,7 +103,6 @@ static bool non_interactive = false;
  */
 int cmdline_args(int argc, char *argv[]) {
 	int opt;
-	int argcnt = 0;
 	
 	while((opt = getopt(argc, argv, "t:s:nd:h")) != -1) {
 		switch(opt) {
@@ -258,6 +262,11 @@ void *evt_c2(void *arg)
 	
 	dbg("exitting...");
 }
+
+/*
+ * workers - global linked list of worker threads.  See workers.h
+ */
+workers_t workers;
 
 /**
  * main - a simple driver for an event producer/consumer framework (MGMT)

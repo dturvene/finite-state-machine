@@ -7,29 +7,25 @@
  */
 
 #include <sys/epoll.h>   /* epoll_ctl */
-#include <utils.h>
-#include <timer.h>
-#include <workers.h>
+#include "utils.h"
+#include "timer.h"
+#include "workers.h"
 
 #define MAX_TIMERS 4
 
 static timer_list_t timer_list;
-static int fd_timer_service;
 static int fd_epoll;
-
-extern volatile uint32_t debug_flag;
 
 static inline void dbg_timer(fsm_events_t evt_id, const char *msg)
 {
 	struct timespec ts;
 	char buf[120];
-	int len;
 
 	if (!(debug_flag&DBG_TIMERS))
 		return;
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	len=snprintf(buf, sizeof(buf), "%s:%ld.%09ld %s\n",
+	snprintf(buf, sizeof(buf), "%s:%ld.%09ld %s\n",
 		     evt_name[evt_id],
 		     ts.tv_sec, ts.tv_nsec,
 		     msg
@@ -131,7 +127,7 @@ int create_timer(uint32_t timerid, fsm_events_t evtid)
 }
 
 /**
- * set_timer - set a timer to a new periodic timeout tick_ms in the future
+ * set_timer_p - set a timer to a new periodic timeout tick_ms in the future
  *
  * @timer_p: pointer to the timer structure
  * @tick_ms: a periodic trigger value in milliseconds
@@ -187,13 +183,14 @@ int set_timer_p(fsmtimer_t *timer_p, uint64_t tick_ms)
 }
 
 /**
- * set_timer - stop the timer from generating periodic timeouts
+ * set_timer - main timer control function
  *
- * @timerfd: the unique timer fd
+ * @timerid: unique timer id
+ * @tick_ms: a periodic trigger value in milliseconds
  *
- * Fully stop the timer, use set_timer to start again.
+ * 
  */
-int set_timer(uint32_t timerid, uint64_t tick_ms)
+void set_timer(uint32_t timerid, uint64_t tick_ms)
 {
 	fsmtimer_t *timer_p = find_timer_by_id(timerid);
 
@@ -203,8 +200,10 @@ int set_timer(uint32_t timerid, uint64_t tick_ms)
 }
 
 /**
- * get_timer - remaing time in msec
+ * get_timer - remaining time in msec
  * @timerid: unique timerid in timer list
+ *
+ * Result: remaining time in msec
  */
 uint64_t get_timer(uint32_t timerid)
 {
@@ -228,8 +227,15 @@ uint64_t get_timer(uint32_t timerid)
 }
 
 /**
- * toggle_timer
+ * toggle_timer - toggle timer state from running to stopped
  *
+ * @timerid: unique timer id
+ *
+ * Return: 0 for success, -1 if timer not found
+ *
+ * Once a timer is created, this is used to stop it if running and start it 
+ * if stopped.  Note, timers should always be running but a user can manage
+ * through the CLI.
  */
 int toggle_timer(uint32_t timerid)
 {
@@ -262,7 +268,6 @@ int toggle_timer(uint32_t timerid)
  */
 void *timer_service_fn(void *arg)
 {
-	fsm_events_t evt_id;
 	struct epoll_event events[MAX_TIMERS];
 	uint64_t res;
 
