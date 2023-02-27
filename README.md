@@ -6,6 +6,20 @@ fatal: Could not read from remote repository.
 See ssh.sh:ssh_agent
 -->
 
+230227
+======
+Added a [meson](https://mesonbuild.com/) build/test file, much improved over Make.
+I am running from a custom docker container with all the latest meson tools.
+
+```
+docker> meson --version
+1.0.1
+docker> meson setup bld_fsm
+docker> cd bld_fsm
+docker> meson compile --clean; meson compile -v
+docker> meson test
+```
+
 Abstract
 ========
 This project demonstrates how to create, manage, drive and regression test a
