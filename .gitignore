@@ -22,6 +22,9 @@
 !.dia
 !.png
 
+# Unignore meson
+!meson.build
+
 # ignore temp and manufactured files
 *.o
 
