@@ -25,6 +25,9 @@
 # Unignore meson
 !meson.build
 
+# Unignore Jules work area
+!rust_jules
+
 # ignore temp and manufactured files
 *.o
 
