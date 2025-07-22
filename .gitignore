@@ -25,11 +25,14 @@
 # Unignore meson
 !meson.build
 
-# Unignore Jules work area
-!rust_jules
+# Unignore Rust work area
+# NOTE: the cargo package area an be synthesized
+!rust_ai_assisted
+!HLD.md
+!stop-cross
+!main.rs
 
-# ignore temp and manufactured files
-*.o
+
 
 
 
