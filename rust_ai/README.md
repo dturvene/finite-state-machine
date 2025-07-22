@@ -21,18 +21,23 @@ Write a Rust program with three threads communicating with channels.  One thread
 * Click `Copy` in the left frame and save it to `HLD.md` in this directory
 * Set up the rust code base:
 
-- Create a new rust package `shell> cargo new stop-cross`
-- click `Copy` in the right frame and paste it into `stop-cross/src/main.rs`
+- Create a new rust package in the current github repo 
+  `shell> cargo new stop_cross --vcs none`
+- click `Copy` in the right frame and paste it into `stop_cross/src/main.rs`
 
-* Build the program `shell> cargo build`.  [Claude]() `can make mistakes`,
-  including compile errors.  [Rust]() has great support for resolving
-  compile-time errors.  If these occur either change the prompt or try to fix
-  by hand in `main.rs`.
+* Build the program:
+```
+shell> cd stop_cross
+shell> cargo build
+```
+[Claude]() `can make mistakes`,  including compile errors.  [Rust]() has great
+support for resolving compile-time errors.  If these occur either change the
+prompt or try to fix by hand in `main.rs`.
   
-* Run the program: `shell> ./target/debug/stop-cross`.
+* Run the program
+`shell> ./target/debug/stop_cross`.
 
 This *should* create a program with functioning stoplight and crosswalk state
-machines and a main function that demonstrates their interactions on standard
-out.
+machines and a main function that prints their interactions on standard out.
 
 * 

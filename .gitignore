@@ -25,14 +25,10 @@
 # Unignore meson
 !meson.build
 
-# Unignore Rust work area
-# NOTE: the cargo package area an be synthesized
-!rust_ai_assisted
+# Unignore Rust work area, esp. main.rs updated by prompts
+!rust_ai
+!stop_cross
+!src
 !HLD.md
-!stop-cross
+!Cargo.toml
 !main.rs
-
-
-
-
-
