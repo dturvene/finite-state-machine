@@ -4,7 +4,7 @@ https://docs.github.com/en/get-started/writing-on-github/getting-started-with-wr
 
 # Prompt Engineering with Claude Sonnet 4
 
-## First Prompt
+## Prompt 1
 * Start [Claude AI](https://claude.ai/new) session in your favorite browser.  I
   use [Google Chrome](https://www.google.com/chrome/)
 * Choose [Claude Sonnet 4](https://www.anthropic.com/claude/sonnet) which is
@@ -21,8 +21,8 @@ PRETTY COOL!
 The program will run continuously; to stop program with a SIGINT signal
 (`Control-C`).
 
-## Second Prompt
-I *love* how [Claude]() generated the state machines! Next I will extend the
+## Prompt 2
+I *love* how [Claude AI]() generated the state machines! Next I will extend the
 prompt to:
 * include a button which, when pressed, transitions the stoplight to YELLOW
 after 5 seconds when it is GREEN, otherwise it does nothing,
@@ -42,7 +42,7 @@ The program will write only ascii text output.
 
 This worked but had two problems.
 
-First, the emojis were still being printed out so I replied 
+First, the emojis were still being printed out so I replied in the prompt area: 
 ```
 Good program.  Change the print calls to use ascii text
 ```
@@ -52,9 +52,18 @@ Second, there was a simple compiler error [E0599]() which I diagnosed and fixed
 by hand.
 
 Now the program works well, including using standard in for the BUTTON,
-transitioning only in the GREEN state.
+transitioning the crosswalk to WALK only when the stoplight is in the GREEN
+state.
 
 WOW, very impressive!
+
+## Prompt 3 using PRD file
+While testing the [Claude AI]() capabilities, I began to create prompts that
+were unwieldly in the prompt window.  I adopted the solution of putting the
+prompt requirements in a version controlled file, `prd.stoplight-crosswalk.md`
+and used a simple prompt to read the file.  See the `Prompt` section in the PRD
+file.
+
 
 ## Prompt Engineering Development Process
 For each prompt example, take the following steps to save the design and rust code.
@@ -103,7 +112,31 @@ shell> ./target/debug/stop_cross
 ### E0599
 * `error[E0599]: no method named `clone` found for struct `SystemState` in the current scope`
 
-This is because `struct SystemState` does not have a `Clone` trait.  Add this by hand.
+This is because `struct SystemState` does not have a derived `Clone` trait.
 See https://doc.rust-lang.org/rust-by-example/trait/derive.html
+Edit `main.rs` for: 
+```
+#[derive(Debug, Clone)]
+struct SystemState {
+```
 
+### E0282
+* `error[E0282]: type annotations needed`
 
+### E0382
+```
+error[E0382]: use of moved value: `event_rx`
+```
+
+`event_rx` is an `mpsc::channel` receiver instance defined in main.  It cannot
+be used in another thread, and cannot be cloned.
+
+Look at using `crossbeam_channel` for multiple readers, by cloning the receiver.
+
+### Warning: crossbeam_channel Receiver unused
+
+```
+warning: unused import: `Receiver`
+```
+
+The original `event_rx` is cloned but never explicitly used in the main routine.
