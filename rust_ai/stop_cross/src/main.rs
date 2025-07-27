@@ -25,6 +25,7 @@ enum State {
     Green,
     Yellow,
     Red,
+    RedBlinking,
     Walk,
     DontWalk,
     Blinking,
@@ -102,6 +103,7 @@ impl FSM {
     }
 }
 
+/*
 // Action functions for stoplight FSM entry actions
 fn send_walk_event(senders: &[Sender<Event>]) {
     println!("  -> Sending WALK event to Crosswalk FSM");
@@ -110,6 +112,7 @@ fn send_walk_event(senders: &[Sender<Event>]) {
         let _ = senders[2].send(Event::Walk);
     }
 }
+*/
 
 fn send_blinking_event(senders: &[Sender<Event>]) {
     println!("  -> Sending BLINKING event to Crosswalk FSM");
@@ -127,10 +130,29 @@ fn send_dont_walk_event(senders: &[Sender<Event>]) {
     }
 }
 
-// 250727:DST mark senders as unused
+// 250727:DST unused variable
 fn button_delay_action(_senders: &[Sender<Event>]) {
     println!("  -> Button pressed, waiting 3 seconds before continuing");
     thread::sleep(Duration::from_secs(3));
+}
+
+fn red_entry_action(senders: &[Sender<Event>]) {
+    println!("  -> Entering RED state, sending WALK event");
+    // Send WALK event immediately upon entering RED
+    if senders.len() > 2 {
+        let _ = senders[2].send(Event::Walk);
+    }
+    
+    // Spawn a thread to handle the 6-second delay before blinking warning
+    let red_senders = senders.to_vec();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_secs(6)); // Wait 6 seconds
+        println!("  -> RED state: 4 seconds remaining, sending internal timer");
+        // Send timer event to trigger RED -> RedBlinking transition
+        if red_senders.len() > 1 {
+            let _ = red_senders[1].send(Event::Timer);
+        }
+    });
 }
 
 fn send_timer_to_fsms(senders: &[Sender<Event>]) {
@@ -160,8 +182,7 @@ fn main() {
         
         // Spawn timer thread that sends TIMER events every 10 seconds
         let timer_senders_inner = timer_senders.clone();
-
-	// 250727:DST mark timer_thread as unused
+	// 250727:DST unused variable
         let _timer_thread = thread::spawn(move || {
             loop {
                 thread::sleep(Duration::from_secs(10));
@@ -213,16 +234,24 @@ fn main() {
                     event: Event::Timer,
                     exit_action: None,
                     next_state: State::Red,
-                    entry_action: Some(send_walk_event),
+                    entry_action: Some(red_entry_action),
                     description: "Yellow -> Red (Timer)".to_string(),
                 },
                 Transition {
                     from_state: State::Red,
                     event: Event::Timer,
                     exit_action: None,
+                    next_state: State::RedBlinking,
+                    entry_action: Some(send_blinking_event),
+                    description: "Red -> RedBlinking (6 seconds elapsed, 4 seconds left)".to_string(),
+                },
+                Transition {
+                    from_state: State::RedBlinking,
+                    event: Event::Timer,
+                    exit_action: None,
                     next_state: State::Green,
                     entry_action: Some(send_dont_walk_event),
-                    description: "Red -> Green (Timer)".to_string(),
+                    description: "RedBlinking -> Green (Timer)".to_string(),
                 },
                 Transition {
                     from_state: State::Green,
@@ -291,14 +320,14 @@ fn main() {
                     entry_action: None,
                     description: "Blinking -> DontWalk".to_string(),
                 },
-                // Transition {
-                //    from_state: State::Walk,
-                //    event: Event::DontWalk,
-                //    exit_action: None,
-                //    next_state: State::DontWalk,
-                //    entry_action: None,
-                //    description: "Walk -> DontWalk".to_string(),
-                //},
+                Transition {
+                    from_state: State::Walk,
+                    event: Event::DontWalk,
+                    exit_action: None,
+                    next_state: State::DontWalk,
+                    entry_action: None,
+                    description: "Walk -> DontWalk".to_string(),
+                },
             ],
         );
 
