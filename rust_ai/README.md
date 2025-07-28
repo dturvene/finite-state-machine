@@ -64,7 +64,6 @@ prompt requirements in a version controlled file, `prd.stoplight-crosswalk.md`
 and used a simple prompt to read the file.  See the `Prompt` section in the PRD
 file.
 
-
 ## Prompt Engineering Development Process
 For each prompt example, take the following steps to save the design and rust code.
 
@@ -131,7 +130,29 @@ error[E0382]: use of moved value: `event_rx`
 `event_rx` is an `mpsc::channel` receiver instance defined in main.  It cannot
 be used in another thread, and cannot be cloned.
 
-Look at using `crossbeam_channel` for multiple readers, by cloning the receiver.
+Look at using `crossbeam_channel` for multiple readers, by cloning the
+receiver.
+
+```
+error[E0382]: borrow of moved value: `stoplight_sender_clone`
+```
+
+This value was defined previously in
+```
+let stoplight_sender_clone = stoplight_sender.clone();
+```
+
+and is used in a function here:
+
+```
+  timer_thread(stoplight_sender_clone.clone());
+```
+
+Fix by cloning the original instance:
+
+```
+  timer_thread(stoplight_senderclone());
+``` 
 
 ### Warning: crossbeam_channel Receiver unused
 
@@ -139,4 +160,38 @@ Look at using `crossbeam_channel` for multiple readers, by cloning the receiver.
 warning: unused import: `Receiver`
 ```
 
-The original `event_rx` is cloned but never explicitly used in the main routine.
+The original `event_rx` is cloned but never explicitly used in the main
+routine. Solution is to add at top of file:
+
+```
+#![allow(unused_imports)]
+```
+
+### Warning: unused variable
+
+* Top of file: `#![allow(unused_variables)]`
+* Above unused variable: `#[allow(unused_variables)]`
+* prepend a `_` to the variable name
+
+
+### E0506
+```
+error[E0506]: cannot assign to `self.current_state` because it is borrowed
+```
+
+### warning field is never read OR function is never used
+
+Add this directive about the code
+```
+#[allow(dead_code)]
+```
+
+### E0308 
+
+```
+error[E0308]: mismatched types
+...
+expected `&str`, found `String`
+```
+
+* https://users.rust-lang.org/t/whats-a-string-and-how-do-i-convert-it-into-a-str/92429

@@ -1,11 +1,10 @@
+#![allow(unused_variables)]
 
-// 250727:crossbeam_channel Receiver cloned but never used. Disable warning for now.
-#[allow(unused_imports)]
-
-use crossbeam_channel::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::io::{self, BufRead};
+// use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Event {
@@ -21,24 +20,27 @@ enum Event {
 
 #[derive(Debug, Clone, PartialEq)]
 enum State {
+    // Stoplight states
+    StoplightRed,
+    StoplightYellow,
+    StoplightGreen,
+    
+    // Crosswalk states
+    CrosswalkDontWalk,
+    CrosswalkWalk,
+    CrosswalkBlinking,
+    
+    // Initial state
     Initial,
-    Green,
-    Yellow,
-    Red,
-    RedBlinking,
-    Walk,
-    DontWalk,
-    Blinking,
 }
 
-type ActionFn = fn(&[Sender<Event>]);
+type ActionFn = fn(&str);
 
 #[derive(Clone)]
 struct Transition {
-    from_state: State,
     event: Event,
     exit_action: Option<ActionFn>,
-    next_state: State,
+    new_state: State,
     entry_action: Option<ActionFn>,
     description: String,
 }
@@ -48,352 +50,276 @@ struct FSM {
     current_state: State,
     last_event: Option<Event>,
     transitions: Vec<Transition>,
+    #[allow(dead_code)]
+    event_sender: Option<Sender<(String, Event)>>,
 }
 
 impl FSM {
-    fn new(name: String, transitions: Vec<Transition>) -> Self {
+    fn new(name: String, event_sender: Option<Sender<(String, Event)>>) -> Self {
         FSM {
             name,
             current_state: State::Initial,
             last_event: None,
-            transitions,
+            transitions: Vec::new(),
+            event_sender,
         }
     }
 
-    fn process_event(&mut self, event: Event, other_senders: &[Sender<Event>]) -> i32 {
-        if event == Event::Exit {
-            return -1;  // EXIT event received
+    fn add_transition(&mut self, from_state: State, event: Event, exit_action: Option<ActionFn>, 
+                     new_state: State, entry_action: Option<ActionFn>, description: String) {
+        // Only add transition if it's from the correct state
+        if self.current_state == State::Initial || from_state == self.current_state {
+            self.transitions.push(Transition {
+                event,
+                exit_action,
+                new_state,
+                entry_action,
+                description,
+            });
         }
+    }
 
-        if event == Event::Display {
-            self.display_state();
-            return 1;   // Special case: Display is always processed
+    fn process_event(&mut self, event: Event) -> bool {
+        self.last_event = Some(event.clone());
+        
+        if event == Event::Exit {
+            return false;
         }
 
         // Find matching transition
-        for transition in &self.transitions {
-            if transition.event == event && self.current_state == transition.from_state {
-                // Execute exit action
-                if let Some(exit_action) = transition.exit_action {
-                    exit_action(other_senders);
-                }
+        let transition = self.transitions.iter()
+            .find(|t| t.event == event)
+            .cloned();
 
-                // Transition to new state
-                self.current_state = transition.next_state.clone();
-                self.last_event = Some(event.clone());
-
-                // Execute entry action
-                if let Some(entry_action) = transition.entry_action {
-                    entry_action(other_senders);
-                }
-
-                println!("{}: {} on {:?}", 
-                    self.name, transition.description, event);
-                return 1;   // Transition occurred
+        if let Some(trans) = transition {
+            // Execute exit action if present
+            if let Some(exit_fn) = trans.exit_action {
+                exit_fn(&self.name);
             }
-        }
 
-        // Event not valid for current state - discard
-        0   // Event discarded
+            // Change state
+            self.current_state = trans.new_state;
+
+            // Execute entry action and print transition info
+            if let Some(entry_fn) = trans.entry_action {
+                entry_fn(&self.name);
+            }
+            print_transition(&self.name, &trans.description);
+
+            // Update transitions for new state
+            self.update_transitions_for_state();
+        }
+        
+        true
+    }
+
+    fn update_transitions_for_state(&mut self) {
+        self.transitions.clear();
+        
+        match self.current_state {
+            State::StoplightRed => {
+                self.add_transition(State::StoplightRed, Event::Timer, None, State::StoplightGreen, 
+                    Some(send_dont_walk_action), "RED to GREEN on TIMER".to_string());
+            },
+            State::StoplightYellow => {
+                self.add_transition(State::StoplightYellow, Event::Timer, None, State::StoplightRed, 
+                    Some(send_walk_action), "YELLOW to RED on TIMER".to_string());
+            },
+            State::StoplightGreen => {
+                self.add_transition(State::StoplightGreen, Event::Timer, None, State::StoplightYellow, 
+                    None, "GREEN to YELLOW on TIMER".to_string());
+                self.add_transition(State::StoplightGreen, Event::Button, None, State::StoplightYellow, 
+                    None, "GREEN to YELLOW on BUTTON".to_string());
+            },
+            State::CrosswalkDontWalk => {
+                self.add_transition(State::CrosswalkDontWalk, Event::Walk, None, State::CrosswalkWalk, 
+                    None, "DONT-WALK to WALK on WALK".to_string());
+            },
+            State::CrosswalkWalk => {
+                self.add_transition(State::CrosswalkWalk, Event::Blinking, None, State::CrosswalkBlinking, 
+                    None, "WALK to BLINKING on BLINKING".to_string());
+                self.add_transition(State::CrosswalkWalk, Event::DontWalk, None, State::CrosswalkDontWalk, 
+                    None, "WALK to DONT-WALK on DONT-WALK".to_string());
+            },
+            State::CrosswalkBlinking => {
+                self.add_transition(State::CrosswalkBlinking, Event::DontWalk, None, State::CrosswalkDontWalk, 
+                    None, "BLINKING to DONT-WALK on DONT-WALK".to_string());
+            },
+            State::Initial => {
+                if self.name == "Stoplight" {
+                    self.add_transition(State::Initial, Event::Start, None, State::StoplightRed, 
+                        Some(send_walk_action), "Initial to RED on START".to_string());
+                } else if self.name == "Crosswalk" {
+                    self.add_transition(State::Initial, Event::Start, None, State::CrosswalkDontWalk, 
+                        None, "Initial to DONT-WALK on START".to_string());
+                }
+            },
+        }
     }
 
     fn display_state(&self) {
-        println!("{}: State={:?}, Last Event={:?}", 
-            self.name, self.current_state, self.last_event);
+        println!("{}: State={:?}, Last Event={:?}", self.name, self.current_state, self.last_event);
     }
 }
 
-/*
-// Action functions for stoplight FSM entry actions
-fn send_walk_event(senders: &[Sender<Event>]) {
-    println!("  -> Sending WALK event to Crosswalk FSM");
-    // Send to crosswalk FSM (index 2)
-    if senders.len() > 2 {
-        let _ = senders[2].send(Event::Walk);
-    }
-}
-*/
-
-fn send_blinking_event(senders: &[Sender<Event>]) {
-    println!("  -> Sending BLINKING event to Crosswalk FSM");
-    // Send to crosswalk FSM (index 2)
-    if senders.len() > 2 {
-        let _ = senders[2].send(Event::Blinking);
-    }
+fn print_transition(fsm_name: &str, description: &str) {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let seconds = now.as_secs();
+    let millis = now.subsec_millis();
+    println!("[{}.{:03}] {}: {}", seconds, millis, fsm_name, description);
 }
 
-fn send_dont_walk_event(senders: &[Sender<Event>]) {
-    println!("  -> Sending DONT-WALK event to Crosswalk FSM");
-    // Send to crosswalk FSM (index 2)
-    if senders.len() > 2 {
-        let _ = senders[2].send(Event::DontWalk);
-    }
+fn send_walk_action(fsm_name: &str) {
+    // This would send WALK event to crosswalk - implemented in stoplight thread
 }
 
-// 250727:DST unused variable
-fn button_delay_action(_senders: &[Sender<Event>]) {
-    println!("  -> Button pressed, waiting 3 seconds before continuing");
-    thread::sleep(Duration::from_secs(3));
+fn send_dont_walk_action(fsm_name: &str) {
+    // This would send DONT-WALK event to crosswalk - implemented in stoplight thread
 }
 
-fn red_entry_action(senders: &[Sender<Event>]) {
-    println!("  -> Entering RED state, sending WALK event");
-    // Send WALK event immediately upon entering RED
-    if senders.len() > 2 {
-        let _ = senders[2].send(Event::Walk);
-    }
-    
-    // Spawn a thread to handle the 6-second delay before blinking warning
-    let red_senders = senders.to_vec();
-    thread::spawn(move || {
-        thread::sleep(Duration::from_secs(6)); // Wait 6 seconds
-        println!("  -> RED state: 4 seconds remaining, sending internal timer");
-        // Send timer event to trigger RED -> RedBlinking transition
-        if red_senders.len() > 1 {
-            let _ = red_senders[1].send(Event::Timer);
+fn timer_thread(stoplight_sender: Sender<(String, Event)>) {
+    loop {
+        thread::sleep(Duration::from_secs(10));
+        if stoplight_sender.send(("Timer".to_string(), Event::Timer)).is_err() {
+            break;
         }
-    });
+    }
 }
 
-fn send_timer_to_fsms(senders: &[Sender<Event>]) {
-    println!("Timer service: Sending TIMER event to FSMs");
-    // Send to stoplight FSM (index 1) and crosswalk FSM (index 2)
-    for i in 1..senders.len() {
-        let _ = senders[i].send(Event::Timer);
+fn stoplight_thread(receiver: Receiver<(String, Event)>, crosswalk_sender: Sender<(String, Event)>) {
+    let mut fsm = FSM::new("Stoplight".to_string(), Some(crosswalk_sender.clone()));
+    fsm.update_transitions_for_state();
+
+    loop {
+        if let Ok((_, event)) = receiver.recv() {
+            if event == Event::Exit {
+                break;
+            }
+
+            let old_state = fsm.current_state.clone();
+            
+            if !fsm.process_event(event.clone()) {
+                break;
+            }
+
+            // Handle state-specific actions
+            match fsm.current_state {
+                State::StoplightRed if old_state != State::StoplightRed => {
+                    // Send WALK immediately when entering RED
+                    let _ = crosswalk_sender.send(("Stoplight".to_string(), Event::Walk));
+                    
+                    // Spawn a thread to send BLINKING after 6 seconds
+                    let crosswalk_sender_clone = crosswalk_sender.clone();
+                    thread::spawn(move || {
+                        thread::sleep(Duration::from_secs(6));
+                        let _ = crosswalk_sender_clone.send(("Stoplight".to_string(), Event::Blinking));
+                    });
+                },
+                State::StoplightGreen if old_state != State::StoplightGreen => {
+                    let _ = crosswalk_sender.send(("Stoplight".to_string(), Event::DontWalk));
+                },
+                State::StoplightYellow if old_state == State::StoplightGreen && event == Event::Button => {
+                    // Wait 4 seconds then transition to RED
+                    thread::sleep(Duration::from_secs(4));
+                    fsm.process_event(Event::Timer);
+                    
+                    // Send WALK immediately when entering RED via button press
+                    let _ = crosswalk_sender.send(("Stoplight".to_string(), Event::Walk));
+                    
+                    // Spawn a thread to send BLINKING after 6 seconds
+                    let crosswalk_sender_clone = crosswalk_sender.clone();
+                    thread::spawn(move || {
+                        thread::sleep(Duration::from_secs(6));
+                        let _ = crosswalk_sender_clone.send(("Stoplight".to_string(), Event::Blinking));
+                    });
+                },
+                _ => {}
+            }
+
+            if event == Event::Display {
+                fsm.display_state();
+            }
+        }
+    }
+}
+
+fn crosswalk_thread(receiver: Receiver<(String, Event)>) {
+    let mut fsm = FSM::new("Crosswalk".to_string(), None);
+    fsm.update_transitions_for_state();
+
+    loop {
+        if let Ok((_, event)) = receiver.recv() {
+            if !fsm.process_event(event.clone()) {
+                break;
+            }
+
+            if event == Event::Display {
+                fsm.display_state();
+            }
+        }
     }
 }
 
 fn main() {
-    // Create dedicated channels for each thread
-    // Index 0: Timer service
-    // Index 1: Stoplight FSM  
-    // Index 2: Crosswalk FSM
-    let (timer_tx, timer_rx) = crossbeam_channel::unbounded::<Event>();
-    let (stoplight_tx, stoplight_rx) = crossbeam_channel::unbounded::<Event>();
-    let (crosswalk_tx, crosswalk_rx) = crossbeam_channel::unbounded::<Event>();
-    
-    // Create array of all senders for passing to threads
-    let all_senders = vec![timer_tx.clone(), stoplight_tx.clone(), crosswalk_tx.clone()];
-    
-    // Timer service thread - sends TIMER events to FSMs every 10 seconds
-    let timer_senders = all_senders.clone();
+    // Create channels
+    let (stoplight_sender, stoplight_receiver) = mpsc::channel();
+    let (crosswalk_sender, crosswalk_receiver) = mpsc::channel();
+
+    // Clone senders for distribution
+    let stoplight_sender_clone = stoplight_sender.clone();
+    let crosswalk_sender_clone = crosswalk_sender.clone();
+
+    // Spawn threads
     let timer_handle = thread::spawn(move || {
-        println!("Timer service started");
-        
-        // Spawn timer thread that sends TIMER events every 10 seconds
-        let timer_senders_inner = timer_senders.clone();
-	// 250727:DST unused variable
-        let _timer_thread = thread::spawn(move || {
-            loop {
-                thread::sleep(Duration::from_secs(10));
-                send_timer_to_fsms(&timer_senders_inner);
-            }
-        });
-
-        // Timer service listens for exit event
-        loop {
-            match timer_rx.recv() {
-                Ok(Event::Exit) => {
-                    println!("Timer service: Received EXIT event");
-                    break;
-                }
-                Ok(_) => continue,
-                Err(_) => break,
-            }
-        }
-        
-        println!("Timer service terminated");
+        // timer_thread(stoplight_sender_clone.clone());
+	timer_thread(stoplight_sender.clone());
     });
 
-    // Stoplight FSM thread - processes TIMER and BUTTON events
-    let stoplight_senders = all_senders.clone();
     let stoplight_handle = thread::spawn(move || {
-        println!("Stoplight FSM started");
-        
-        let mut stoplight_fsm = FSM::new(
-            "Stoplight".to_string(),
-            vec![
-                Transition {
-                    from_state: State::Initial,
-                    event: Event::Start,
-                    exit_action: None,
-                    next_state: State::Green,
-                    entry_action: Some(send_dont_walk_event),
-                    description: "Initial -> Green".to_string(),
-                },
-                Transition {
-                    from_state: State::Green,
-                    event: Event::Timer,
-                    exit_action: None,
-                    next_state: State::Yellow,
-                    entry_action: Some(send_blinking_event),
-                    description: "Green -> Yellow (Timer)".to_string(),
-                },
-                Transition {
-                    from_state: State::Yellow,
-                    event: Event::Timer,
-                    exit_action: None,
-                    next_state: State::Red,
-                    entry_action: Some(red_entry_action),
-                    description: "Yellow -> Red (Timer)".to_string(),
-                },
-                Transition {
-                    from_state: State::Red,
-                    event: Event::Timer,
-                    exit_action: None,
-                    next_state: State::RedBlinking,
-                    entry_action: Some(send_blinking_event),
-                    description: "Red -> RedBlinking (6 seconds elapsed, 4 seconds left)".to_string(),
-                },
-                Transition {
-                    from_state: State::RedBlinking,
-                    event: Event::Timer,
-                    exit_action: None,
-                    next_state: State::Green,
-                    entry_action: Some(send_dont_walk_event),
-                    description: "RedBlinking -> Green (Timer)".to_string(),
-                },
-                Transition {
-                    from_state: State::Green,
-                    event: Event::Button,
-                    exit_action: Some(button_delay_action),
-                    next_state: State::Yellow,
-                    entry_action: Some(send_blinking_event),
-                    description: "Green -> Yellow (Button)".to_string(),
-                },
-            ],
-        );
-
-        loop {
-            match stoplight_rx.recv() {
-                Ok(event) => {
-                    let result = stoplight_fsm.process_event(event, &stoplight_senders);
-                    if result == -1 {
-                        println!("Stoplight FSM: Received EXIT event");
-                        break;
-                    }
-                    // result == 1: transition occurred, result == 0: event discarded
-                }
-                Err(_) => break,
-            }
-        }
-        println!("Stoplight FSM terminated");
+        stoplight_thread(stoplight_receiver, crosswalk_sender_clone);
     });
 
-    // Crosswalk FSM thread - processes WALK, BLINKING, DONT-WALK events
-    let crosswalk_senders = all_senders.clone();
     let crosswalk_handle = thread::spawn(move || {
-        println!("Crosswalk FSM started");
-        
-        let mut crosswalk_fsm = FSM::new(
-            "Crosswalk".to_string(),
-            vec![
-                Transition {
-                    from_state: State::Initial,
-                    event: Event::Start,
-                    exit_action: None,
-                    next_state: State::DontWalk,
-                    entry_action: None,
-                    description: "Initial -> DontWalk".to_string(),
-                },
-                Transition {
-                    from_state: State::DontWalk,
-                    event: Event::Walk,
-                    exit_action: None,
-                    next_state: State::Walk,
-                    entry_action: None,
-                    description: "DontWalk -> Walk".to_string(),
-                },
-                Transition {
-                    from_state: State::Walk,
-                    event: Event::Blinking,
-                    exit_action: None,
-                    next_state: State::Blinking,
-                    entry_action: None,
-                    description: "Walk -> Blinking".to_string(),
-                },
-                Transition {
-                    from_state: State::Blinking,
-                    event: Event::DontWalk,
-                    exit_action: None,
-                    next_state: State::DontWalk,
-                    entry_action: None,
-                    description: "Blinking -> DontWalk".to_string(),
-                },
-                Transition {
-                    from_state: State::Walk,
-                    event: Event::DontWalk,
-                    exit_action: None,
-                    next_state: State::DontWalk,
-                    entry_action: None,
-                    description: "Walk -> DontWalk".to_string(),
-                },
-            ],
-        );
-
-        loop {
-            match crosswalk_rx.recv() {
-                Ok(event) => {
-                    let result = crosswalk_fsm.process_event(event, &crosswalk_senders);
-                    if result == -1 {
-                        println!("Crosswalk FSM: Received EXIT event");
-                        break;
-                    }
-                    // result == 1: transition occurred, result == 0: event discarded
-                }
-                Err(_) => break,
-            }
-        }
-        println!("Crosswalk FSM terminated");
+        crosswalk_thread(crosswalk_receiver);
     });
 
-    // Main loop - read events from stdin and send to appropriate threads
-    println!("Stoplight/Crosswalk FSM System");
+    println!("Stoplight Crosswalk FSM System Started");
     println!("Commands: S (start), B (button), D (display), X (exit)");
-    println!("Timer events will be generated automatically every 10 seconds after start");
-    
+
+    // Read events from stdin
     let stdin = io::stdin();
     for line in stdin.lock().lines() {
-        let line = line.unwrap();
-        for token in line.split_whitespace() {
-            match token.to_uppercase().as_str() {
-                "S" => {
-                    println!("Main: Sending START event to all FSMs");
-                    let _ = stoplight_tx.send(Event::Start);
-                    let _ = crosswalk_tx.send(Event::Start);
-                }
-                "B" => {
-                    println!("Main: Sending BUTTON event to Stoplight FSM");
-                    let _ = stoplight_tx.send(Event::Button);
-                }
-                "D" => {
-                    println!("Main: Sending DISPLAY event to all FSMs");
-                    let _ = stoplight_tx.send(Event::Display);
-                    let _ = crosswalk_tx.send(Event::Display);
-                    thread::sleep(Duration::from_millis(200)); // Allow display to complete
-                }
-                "X" => {
-                    println!("Main: Sending EXIT event to all threads");
-                    let _ = timer_tx.send(Event::Exit);
-                    let _ = stoplight_tx.send(Event::Exit);
-                    let _ = crosswalk_tx.send(Event::Exit);
-                    break;
-                }
-                _ => {
-                    // Discard invalid tokens as specified
+        if let Ok(input) = line {
+            for token in input.split_whitespace() {
+                match token.to_uppercase().as_str() {
+                    "S" => {
+                        let _ = stoplight_sender_clone.send(("Main".to_string(), Event::Start));
+                        let _ = crosswalk_sender.send(("Main".to_string(), Event::Start));
+                    },
+                    "B" => {
+                        let _ = stoplight_sender_clone.send(("Main".to_string(), Event::Button));
+                    },
+                    "D" => {
+                        let _ = stoplight_sender_clone.send(("Main".to_string(), Event::Display));
+                        let _ = crosswalk_sender.send(("Main".to_string(), Event::Display));
+                    },
+                    "X" => {
+                        let _ = stoplight_sender_clone.send(("Main".to_string(), Event::Exit));
+                        let _ = crosswalk_sender.send(("Main".to_string(), Event::Exit));
+                        
+                        // Wait for threads to finish
+                        let _ = timer_handle.join();
+                        let _ = stoplight_handle.join();
+                        let _ = crosswalk_handle.join();
+                        
+                        println!("System shutdown complete");
+                        return;
+                    },
+                    _ => {
+                        // Discard invalid tokens as specified
+                    }
                 }
             }
         }
-        
-        if line.to_uppercase().contains("X") {
-            break;
-        }
     }
-
-    // Wait for threads to finish
-    let _ = timer_handle.join();
-    let _ = stoplight_handle.join();
-    let _ = crosswalk_handle.join();
-    
-    println!("Program terminated.");
 }
