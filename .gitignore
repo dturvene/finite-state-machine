@@ -26,6 +26,7 @@
 !meson.build
 
 # Unignore Rust work area, esp. main.rs updated by prompts
+# add medium article because I *hate* the medium stoopit editor
 !rust_ai
 !stop_cross
 !src
@@ -33,3 +34,4 @@
 !Cargo.toml
 !main.rs
 !prd.stoplight-crosswalk.md
+!medium-article.md
