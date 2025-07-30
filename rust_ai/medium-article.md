@@ -4,12 +4,8 @@ pandoc medium-rust-aiagent.md -o mra.html
 
 * upload
 https://github.com/dturvene/finite-state-machine/blob/main/rust_ai/medium-article.md
--->
 
----
-# title section required, otherwise pandoc warning
-title: "Convert a program to Rust using an AI assistant"
----
+-->
 
 # Abstract
 This article
