@@ -23,6 +23,10 @@ prompt is entered, the browser window splits into two panes: the right pane is
 the generated code and the left pane is a High Level Description (HLD) of the
 code.
 
+For the "prompt engineering" methodology I loosely followed 
+[Claude Prompt Engineering](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview). In retrospect I should have followed the recommendations more; 
+I think it would have produced more appealing results.  Lesson learned!
+
 One issue I faced with the [Claude AI]() free version was hitting a daily limit 
 on `free messages` when I entered too many prompts and prompt replys.  I
 avoided this by hand-editting the code, but several times I hit the usage token 
@@ -34,13 +38,12 @@ I performed three prompt cycles:
 * [Prompt 2](): a more detailed prompt to add requirements. The result was much
   better but also produced more issues.  Again very impressive!
 * [Prompt 3](): I tried to capture all the requirements of the
-  [C](https://en.wikipedia.org/wiki/C_(programming_language)), 
-  [Meson Build](https://mesonbuild.com/) project.
+  [C](https://www.c-language.org/) project.
   This was more daunting and caused me to update the requirements
   over several days.  However, the feedback cycle of requirement, code
   inspection, requirement update resulted in something similar to the 
-  [C](https://en.wikipedia.org/wiki/C_(programming_language))
-  project.  I have a working knowledge of [Rust]() but no where near the level
+  [C]() project.
+  I have a working knowledge of [Rust]() but no where near the level 
   of comfort I have with [C]() so I was grateful for all the automatic code
   generation done by [Claude AI]()
   
@@ -65,6 +68,8 @@ PRETTY COOL!
 
 The program will run continuously; to stop program with a SIGINT signal
 (`Control-C`).
+
+In github I tagged this effort as `ai_prompt1`.
 
 ## Prompt 2
 I *love* how [Claude AI]() generated the state machines! Next I will extend the
@@ -102,6 +107,8 @@ state.
 
 WOW, very impressive!
 
+I tagged this effort as `ai_prompt2`.
+
 ## Prompt 3 using PRD file
 While testing the [Claude AI]() capabilities, I began to create prompts that
 were unwieldly in the prompt window.  I adopted the solution of putting the
@@ -122,6 +129,8 @@ requirement to use a vector.
 The final PRD and subsequent reply modifications in `HLD.md` was the sixth
 iteration of the PRD, and even then I need two reply prompts to modify the code
 to what I wanted.
+
+I tagged the final effort for this as... `ai_prompt3`.
 
 ## Prompt Engineering Development Process
 For each prompt example, take the following steps to save the design and rust code.
