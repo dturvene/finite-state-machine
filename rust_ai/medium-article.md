@@ -6,7 +6,7 @@ paste into medium story
 
 NOTE: Upload to Medium keeps failing.
 
-Title: Converting a C program to Rust Using AI-assisted Development Practices
+Title: Converting a C program to Rust Using Agentic Development Practices
 -->
 
 # Abstract
@@ -114,26 +114,27 @@ produces code to fully impelement the requirements.
 
 "Vibe" has become an often repeated (and misunderstood) buzzword for
 [agentic ai system](https://www.ibm.com/think/topics/agentic-ai)
-implementations producing code from natural language prompts.
-Simon Willison's blog article 
-[vibe coding versus ai-assisted programming](https://simonwillison.net/2025/Mar/19/vibe-coding/)
-gives clarification to the terms "vibe" and "ai-assisted" coding.
+implementations producing code from natural language prompts. Another 
+confusing buzzword is "ai-assisted", which seems to have no clear definition.
+In this paper I will use the [Claude AI] response to the following prompt as
+the definition for both terms:
 
-I decided to explore vibe coding and ai-assisted coding on the FSM pattern.
+* `what is the difference between ai-assisted coding and agentic coding?`
 
-# Rust development using an AI Agent for Ai-assisted coding
+I decided to explore vibe coding and agentic coding on the FSM pattern.
+
+# Rust development using an AI Agent for Agentic coding
 I created a `rust_ai` subdir in my [github FSM repo] containing the original
 [C] article.  Inside `rust_ai` I experimented with agentic 
 [prompt engineering]. I started with vibe coding concepts but it quickly went
-off the 
-rails.  There is very little that vibe coding achieved for me, other than
-"wait, what just happened?" 
-However, 
-[AI-assisted coding](https://blog.nilenso.com/blog/2025/05/29/ai-assisted-coding/) 
-demonstrated huge efficiencies. 
+off the rails.  There is very little that vibe coding achieved for me, other
+than "wait, what just happened?" However, agentic coding systems
+demonstrated huge promise!
 
-I saw the benefit of ai-assisted coding so in the next step I tested several
-popular AI Agents and, almost randomly, chose the free version of [Claude AI].
+I saw the benefit of agentic coding so in the next step I tested several
+popular AI Agents and, almost randomly, chose the free version of [Claude AI],
+which is labelled as an "AI Coding Assistant" even though I used it in the
+agentic definition.
 
 Next I did on deep dive using [Claude AI] on reconstructing the [C] project in
 [Rust]. See the file at
@@ -166,7 +167,7 @@ Agent was implementing a requirement I specified, perhaps in not enough detail.
 Perhaps the "bug" was in my specification?  Perhaps I assumed too much about
 how [Claude AI] plunders [Rust] code fragments?
 
-AI agents can create boiler plate code templates, refactor code, provide
+Agentic AI tools can create boiler plate code templates, refactor code, provide
 test data and functions, etc. A developer stills needs to provide:
 
 1. a comprehensive set of requirements,
@@ -174,31 +175,32 @@ test data and functions, etc. A developer stills needs to provide:
 3. build the executable,
 4. test the executable against the requirements.
 
-I highly recommend two more of Simon Willison's posts on ai-assisted coding:
+I highly recommend two more of Simon Willison's posts on agentic coding:
 
 * [Agentic Coding: The Future of SW with Agents](https://simonwillison.net/2025/Jun/29/agentic-coding/)
-* [Using LLMS for Code](https://simonwillison.net/2025/Mar/11/using-llms-for-code/)
+* [Using LLMs for Code](https://simonwillison.net/2025/Mar/11/using-llms-for-code/)
 
 My next steps are parallel efforts to:
 
-* expand my ai-assisted prompts to add clarity and features,
+* expand my natural language prompts to add clarity and features,
 * research [MCP] and [Large Language Model] technology, and APIs to them
   probably using [Python]
 * research pros and cons of various agents,
 * investigate AI IDEs to improve the development cycle.
 
 As an ancillary effort I want to better learn [Rust] to support my agentic
-awareness.  I may also return to [Python] using ai-assisted development.
+awareness.  I may also return to [Python] using agentic development.
 
 That is A LOT of research! I will see how it progresses.
 
 # Summary
-It is clear to me from my brief deep-dive that AI-assisted software development
+It is clear to me from my brief deep-dive that Agentic software development
 is the future.  My analogy is the early days of the automobile.  Animal labor
 was still needed (and is still today) but the majority of transportation needs
 were assumed by automobiles with increasing functionality and reliability.
-Today we are making progress with ai-assisted driving, though full self-driving
-("vibe driving" if you will) is still in the distant future.
+Today ai-assisted driving is a reality. Agentic driving is in the future. 
+Full self-driving ("vibe driving" if you will) is debatably in the distant
+future.
 
 <!-- external reference links -->
 [Rust]: https://www.rust-lang.org/
