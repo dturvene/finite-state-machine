@@ -12,7 +12,8 @@ There are a **huge** number of agentic models to achieve our goal; I tested a
 subset with varying degrees of success. For this paper I selected the free
 version of [Claude AI] because it seemed to 
 generate good Rust code and I liked the interface.  In the next phase I will 
-explore AI-assisted Integrated Development Environments (IDEs).
+explore AI-assisted Integrated Development Environments (IDEs), as opposed to
+the agentic code I have been creating in this project.
 
 [Claude AI] uses a browser window with a prompt input
 area and several buttons for domain-specific prompts.  One can select a Claude
@@ -48,11 +49,11 @@ I have a working knowledge of Rust but no where near the level
 of comfort I have with C so I was grateful for all the automatic code
 generation done by Claude.
   
-In summary, it is clear AI Assisted code development is the future.  The old
-development process was: copy-and-paste boiler plate code, add libraries and
-subject matter expert (SME) code, compile, test, release.  The new process is
-use an AI model to generate the code, tune it through prompts, compile, test,
-release.
+In summary, it is clear AI Assisted and Agentic code development is the future.
+The old development process was: copy-and-paste boiler plate code, add
+libraries and subject matter expert (SME) code, compile, test, release.  The
+new process is use an AI model to generate the code, tune it through prompts,
+compile, test, release.
 
 ## Prompt 1
 * Start [Claude AI] session in your favorite browser. I use [Google Chrome].
