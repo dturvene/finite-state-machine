@@ -1,6 +1,22 @@
 <!-- 
-https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax
+gitrepo.sh:github_rust_ai
+;; proof-read:
+pandoc README.md -o /tmp/readme.html
+google-chrome /tmp/readme.html
 -->
+
+# Project Update
+Subsequent to publishing this article on [Medium], I performed 
+[Prompt 3](#prompt-3-using-prd-file) replacing the [Claude Sonnet 4] model with the
+more advanced [Claude Opus 4] model, which is available with a pro
+subscription.  The results were similar but Opus 4 seemed better at
+interpreting the prompts.
+
+See the `HLD.md` document for the prompt/response/reply exchange. My first
+reply caused Claude to extensively refactor the code!  That would have taken me
+at least hours to do.
+
+I committed the work using the `ai_prompt4` tag.
 
 # Prompt Engineering with Claude Sonnet 4
 The goal of this effort is to use a current or `frontier` AI model to
@@ -304,8 +320,10 @@ Fix following this link:
 [Rust]: https://www.rust-lang.org/
 [Claude AI]: https://claude.ai/new
 [Claude Sonnet 4]: https://www.anthropic.com/claude/sonnet
+[Claude Opus 4]: https://www.anthropic.com/claude/opus
 [Claude Prompt Engineering]: https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview
 [C]: https://www.c-language.org/
 [Google Chrome]: https://www.google.com/chrome/
 [Hashmap]: https://doc.rust-lang.org/std/collections/struct.HashMap.html
 [Vector]: https://doc.rust-lang.org/std/vec/struct.Vec.html
+[Medium]: https://medium.com/
