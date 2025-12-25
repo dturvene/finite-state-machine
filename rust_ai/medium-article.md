@@ -13,6 +13,24 @@ Title: Converting a C program to Rust Using Agentic Development Practices
 This article documents my experience converting a
 [C] program to [Rust] using AI agentic [prompt engineering].
 
+# Update
+On July 31 2025 I published this article using the free [Claude AI] web
+interface.  I have recently started using [Claude Code] with the Anthropic Pro
+Plan for agentic development with excellent results.
+
+There are several major benefits to [Claude Code]:
+
+* It analizes the code well and creates a `CLAUDE.md` file containing the
+  high-level analysis of the codebase and build/test environment.
+* It builds the code, fixing the compile time errors.  Most notably is
+  refactoring the code to use more appropriate data structures and logic.
+* It will interprete the requirements in a Product Requirements Document (PRD)
+  fairly well.  I then had to perform several prompt iterations to detail and
+  fulfill my requirements.  After I had successfully tested the code, I asked
+  [Claude Code] to update the markdown PRD, which it did well.
+  
+  
+
 # Background
 On May 11 2021 I published [Implementing a Finite State Machine in C].
 
@@ -206,6 +224,7 @@ future.
 [Rust]: https://www.rust-lang.org/
 [Claude AI]: https://claude.ai/new
 [Claude Sonnet 4]: https://www.anthropic.com/claude/sonnet
+[Claude Code]: https://code.claude.com/docs/en/overview
 [prompt engineering]: https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview
 [C]: https://www.c-language.org/
 [C++]: https://isocpp.org/
