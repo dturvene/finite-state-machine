@@ -13,10 +13,10 @@ Title: Converting a C program to Rust Using Agentic Development Practices
 This article documents my experience converting a
 [C] program to [Rust] using AI agentic [prompt engineering].
 
-# Update
+# Development Update
 On July 31 2025 I published this article using the free [Claude AI] web
 interface.  I have recently started using [Claude Code] with the Anthropic Pro
-Plan for agentic development with excellent results.
+Plan for agentic development with impressive results.
 
 There are several major benefits to [Claude Code]:
 
@@ -29,7 +29,14 @@ There are several major benefits to [Claude Code]:
   fulfill my requirements.  After I had successfully tested the code, I asked
   [Claude Code] to update the markdown PRD, which it did well.
   
-  
+The final code and `prd.stoplight-crosswalk.md` after the [Claude Code]
+modificiations are tagged with `claude_code1`.
+
+I was very impressed with the prompt engineering in [Claude AI] but 
+[Claude Code] is **much** more agentic.  I used the same [Claude Sonnet 4]
+model (current is Sonnet 4.5) to remove one comparison variable.  I understand
+[Google Antigravity] is the "frontier" for AI IDEs but I will continue to use
+[Claude Code].
 
 # Background
 On May 11 2021 I published [Implementing a Finite State Machine in C].
@@ -240,3 +247,4 @@ future.
 [Claude]: https://claude.ai/new
 [github FSM repo]: https://github.com/dturvene/finite-state-machine
 [MCP]: https://modelcontextprotocol.io/introduction
+[Google Antigravity]: https://antigravity.google/blog/introducing-google-antigravity
