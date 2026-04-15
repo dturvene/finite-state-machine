@@ -5,7 +5,22 @@ pandoc README.md -o /tmp/readme.html
 google-chrome /tmp/readme.html
 -->
 
-# Project Update
+# Project Update Apr 2026
+I used a new version of [Claude Code] and [Claude Sonnet 4] model on the
+`claude_code1` source.  I do not know [Rust] well but a quick diff of the
+source demonstrated that the code (to me) is easier to comprehend and comments 
+have been added.
+
+I committed this work using the `claude_code2` tag.
+
+# Project Update Dec 2025
+I used [Claude Code] inside a [Docker] container (using [Claude AI] to create
+the container files). [Claude Code] was significantly better at developing and
+fixing the code.
+
+I committed the work using the `claude_code1` tag.
+
+# Project Update Aug 2025
 Subsequent to publishing this article on [Medium], I performed 
 [Prompt 3](#prompt-3-using-prd-file) replacing the [Claude Sonnet 4] model with the
 more advanced [Claude Opus 4] model, which is available with a pro
@@ -327,3 +342,7 @@ Fix following this link:
 [Hashmap]: https://doc.rust-lang.org/std/collections/struct.HashMap.html
 [Vector]: https://doc.rust-lang.org/std/vec/struct.Vec.html
 [Medium]: https://medium.com/
+[Claude Code]: https://code.claude.com/docs/en/overview
+[Docker]: https://www.docker.com/
+[Docker Compose]: https://docs.docker.com/compose/
+[Medium]: https://dturvene.medium.com/deep-dive-convert-a-c-program-to-rust-using-ai-assisted-development-practices-5bc8e9f076bb?postPublishedType=repub

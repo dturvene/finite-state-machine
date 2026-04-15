@@ -6,6 +6,9 @@ paste into medium story
 
 NOTE: Upload to Medium keeps failing.
 
+260415: add new sections, convert to html, cut-and-paste new sections 
+into medium doc
+
 Title: Converting a C program to Rust Using Agentic Development Practices
 -->
 
@@ -13,7 +16,59 @@ Title: Converting a C program to Rust Using Agentic Development Practices
 This article documents my experience converting a
 [C] program to [Rust] using AI agentic [prompt engineering].
 
-# Development Update
+# Development Update April 2026
+As part of my ongoing agentic research I cleaned and rebuilt this project
+using the most recent [Claude Code] 2.1.108 and [Claude Sonnet 4] 4.6 model
+without modifying the project requirements definition (PRD) file
+`prd.stoplight-crosswalk.md`.  I first performed a `cargo clean` to remove the
+build artifacts and then entered the prompt. [Claude Code] analyzed the
+existing [Rust] code (tagged `claude_code1`) and modified it.
+
+I do not know [Rust] well but a quick diff of the source demonstrated that the
+code (to me) is easier to comprehend and comments have been added.  My unit
+tests passed without issue.
+
+The only changes to the repo are the rust source file `main.rs` and this medium
+article. I tagged this version as `claude_code2`.
+
+# Claude Code in a Docker Container
+As part of my ongoing agentic research I had a conversation/thread/chat with
+[Claude AI] to create a [Docker] container for running [Claude AI] products,
+including [Claude Code]. I have some experience with [Docker] containers and
+use them for consistent sandboxes separated from my development system 
+(Ubuntu 24.04). 
+
+I tried a variety of prompts, the simplest/most accurate being 
+`create a docker image for claude code`.  The [Claude AI] response was
+*impressive* giving a summary and explanation of what it had produced and
+instructions on how to set it up. Briefly, from the response:
+
+```
+Since Claude Code is a command-line tool for agentic coding, this Docker
+environment provides an isolated, reproducible setup where you can use it
+without affecting your local system. The container includes common development
+tools and languages that Claude Code might need when generating or working with
+code.
+```
+
+It built an artifact file containing
+* README.md: an overview and step-by-step instructions to set up the Docker
+  image and run the container AND install [Claude Code] in the container
+* Dockerfile: instructions to create a docker image
+* compose.yml: a [Docker Compose] YAML file
+* .dockerignore
+* .env.example: shell environment for ATHROPIC_API_KEY and CLAUDE_MODEL
+* Makefile: rules to to build, run, clean the docker image and containers
+
+After about (maybe) ten minutes of inspecting/splitting the artifacts file I
+thought to myself "Wow that was easy."  I then performed some small edits to
+the files for my personal tastes, made the image (`make build`), started the
+container (`make run`) and began using [Claude Code]!
+
+This effort is in my private (non-github) git repository along with a number of
+hand-built containers. In the future, I will use [Claude AI] for this work!
+
+# Development Update Dec 2025
 On July 31 2025 I published this article using the free [Claude AI] web
 interface.  I have recently started using [Claude Code] with the Anthropic Pro
 Plan for agentic development with impressive results.
@@ -248,3 +303,5 @@ future.
 [github FSM repo]: https://github.com/dturvene/finite-state-machine
 [MCP]: https://modelcontextprotocol.io/introduction
 [Google Antigravity]: https://antigravity.google/blog/introducing-google-antigravity
+[Docker]: https://www.docker.com/
+[Docker Compose]: https://docs.docker.com/compose/
