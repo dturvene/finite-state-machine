@@ -16,6 +16,11 @@ Title: Converting a C program to Rust Using Agentic Development Practices
 This article documents my experience converting a
 [C] program to [Rust] using AI agentic [prompt engineering].
 
+The bottom line for me is agentic coding is at the *very* least an efficient
+way to prototype code or build a code framework to build upon. Complex AI
+models trained for coding with strong iterative prompt engineering can create a 
+finished product. 
+
 # Development Update April 2026
 As part of my ongoing agentic research I cleaned and rebuilt this project
 using the most recent [Claude Code] 2.1.108 and [Claude Sonnet 4] 4.6 model
@@ -28,7 +33,7 @@ I do not know [Rust] well but a quick diff of the source demonstrated that the
 code (to me) is easier to comprehend and comments have been added.  My unit
 tests passed without issue.
 
-The only changes to the repo are the rust source file `main.rs` and this medium
+The only changes to the repo are the `README.md`, rust source file `main.rs` and this medium
 article. I tagged this version as `claude_code2`.
 
 # Claude Code in a Docker Container
